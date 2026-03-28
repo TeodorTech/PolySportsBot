@@ -2,6 +2,7 @@ import os
 
 # ── Gamma API Config ───────────────────────────────────────────────────────────
 GAMMA_API_URL = "https://gamma-api.polymarket.com"
+DATA_API_URL = "https://data-api.polymarket.com"
 CLOB_WSS_URL = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 SPORTS_TAG_ID = 100639
 

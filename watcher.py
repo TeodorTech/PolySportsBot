@@ -65,7 +65,6 @@ class PolymarketWatcher:
                 size = float(msg.get("size") or 0)
                 side = msg.get("side", "N/A")
                 ts_raw = msg.get("timestamp", "")
-                wallet = msg.get("maker") or msg.get("taker") or "N/A"
                 value = price * size
 
                 # Filter: BUY ONLY
@@ -75,6 +74,10 @@ class PolymarketWatcher:
                 # Filter: Value threshold
                 if value < MIN_TRADE_VALUE:
                     continue
+
+                # Wallet address extraction (Catch & Fetch)
+                # WS doesn't provide it, so we fetch the latest trade record for this asset.
+                wallet = GammaAPI.fetch_latest_trade_wallet(token_id)
 
                 # Metadata
                 event_name = self.token_to_event.get(token_id, "Unknown")

@@ -1,6 +1,6 @@
 import requests
 import json
-from config import GAMMA_API_URL, SPORTS_TAG_ID, MIN_EVENT_VOLUME
+from config import GAMMA_API_URL, DATA_API_URL, SPORTS_TAG_ID, MIN_EVENT_VOLUME
 
 class GammaAPI:
     """Client for interacting with the Polymarket Gamma API."""
@@ -52,6 +52,23 @@ class GammaAPI:
             if float(e.get("volume") or 0) >= MIN_EVENT_VOLUME
         ]
         return filtered
+
+    @staticmethod
+    def fetch_latest_trade_wallet(asset_id: str) -> str:
+        """
+        Fetch the maker address for the most recent trade of a given asset.
+        This is a public Data API call and does not require authentication.
+        """
+        try:
+            params = {"asset_id": asset_id, "limit": 1}
+            response = requests.get(f"{DATA_API_URL}/trades", params=params, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                if data and isinstance(data, list) and len(data) > 0:
+                    return data[0].get("maker_address") or "N/A"
+        except Exception as e:
+            print(f"[GAMMA API ERROR] Failed to fetch trade wallet: {e}")
+        return "N/A"
 
 def build_lookup_tables(events: list[dict]):
     """
