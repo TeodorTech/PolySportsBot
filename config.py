@@ -6,10 +6,10 @@ CLOB_WSS_URL = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 SPORTS_TAG_ID = 100639
 
 # ── Filtering Constants ────────────────────────────────────────────────────────
-MIN_EVENT_VOLUME = 1_000_000   # $1M — events we care about
-MIN_TRADE_VALUE = 100_000      # $100k — alert threshold (configured by user)
-PING_INTERVAL = 20           # seconds between keep-alive pings
-REFRESH_INTERVAL = 1800      # Re-fetch events every 30 mins
+MIN_EVENT_VOLUME = int(os.getenv("MIN_EVENT_VOLUME", 1_000_000))
+MIN_TRADE_VALUE = int(os.getenv("MIN_TRADE_VALUE", 50_000))
+PING_INTERVAL = int(os.getenv("PING_INTERVAL", 20))           
+REFRESH_INTERVAL = int(os.getenv("REFRESH_INTERVAL", 1800))   
 
 # ── Telegram Config ────────────────────────────────────────────────────────────
 TELEGRAM_ENABLED = True
