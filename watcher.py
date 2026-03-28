@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from config import CLOB_WSS_URL, MIN_TRADE_VALUE, PING_INTERVAL, REFRESH_INTERVAL
 from gamma_api import GammaAPI, build_lookup_tables
 from notifier import Notifier
+from database import Database
 
 class PolymarketWatcher:
     """Manager for WebSocket trades and Periodic refreshes."""
@@ -77,6 +78,7 @@ class PolymarketWatcher:
                 # Metadata
                 event_name = self.token_to_event.get(token_id, "Unknown")
                 outcome_name = self.token_to_outcome.get(token_id, "Unknown")
+                market_id = self.token_to_mktid.get(token_id, "N/A")
 
                 # Timestamp and Date comparison
                 try:
@@ -101,6 +103,17 @@ class PolymarketWatcher:
                     price=price,
                     value=value,
                     ts=ts_str
+                )
+
+                # Save to Database
+                Database.save_signal(
+                    event_name=event_name,
+                    outcome=outcome_name,
+                    side=side,
+                    price=price,
+                    value=value,
+                    ts=ts_str,
+                    market_id=market_id
                 )
 
         except (json.JSONDecodeError, TypeError):

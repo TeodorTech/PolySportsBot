@@ -15,3 +15,7 @@ REFRESH_INTERVAL = 1800      # Re-fetch events every 30 mins
 TELEGRAM_ENABLED = True
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8326363584:AAHhOnM2fCWi6IVgXZBOL3bPgE4kDmm2pE4")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "7301455234")
+
+# ── Database Config ────────────────────────────────────────────────────────────
+# Railway automatically provides DATABASE_URL
+DATABASE_URL = os.getenv("DATABASE_URL")

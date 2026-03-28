@@ -3,11 +3,15 @@ from config import MIN_EVENT_VOLUME, TELEGRAM_ENABLED
 from gamma_api import GammaAPI, build_lookup_tables
 from notifier import Notifier
 from watcher import PolymarketWatcher
+from database import Database
 
 def main() -> None:
     print("=" * 70)
     print(" Polymarket Sports Watcher — Pre-match Entry Signals Only")
     print("=" * 70 + "\n")
+
+    # Step 0 — Initialize Database
+    Database.init_db()
 
     # Step 1 — Fetch qualifying events
     try:
