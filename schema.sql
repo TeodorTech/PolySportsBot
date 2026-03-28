@@ -9,6 +9,5 @@ CREATE TABLE IF NOT EXISTS signals (
     external_ts TEXT,
     is_win BOOLEAN DEFAULT NULL, 
     market_id TEXT,             
-    wallet_address TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

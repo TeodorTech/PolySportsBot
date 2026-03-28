@@ -9,7 +9,7 @@ def main() -> None:
     print("=" * 70)
     print(" Polymarket Sports Watcher — Pre-match Entry Signals Only")
     print("=" * 70 + "\n")
-    # Trigger deployment - Tracking wallet additions
+
 
     # Step 0 — Initialize Database
     Database.init_db()

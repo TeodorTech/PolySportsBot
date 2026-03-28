@@ -75,10 +75,6 @@ class PolymarketWatcher:
                 if value < MIN_TRADE_VALUE:
                     continue
 
-                # Wallet address extraction (Catch & Fetch)
-                # WS doesn't provide it, so we fetch the latest trade record for this asset.
-                wallet = GammaAPI.fetch_latest_trade_wallet(token_id)
-
                 # Metadata
                 event_name = self.token_to_event.get(token_id, "Unknown")
                 outcome_name = self.token_to_outcome.get(token_id, "Unknown")
@@ -117,8 +113,7 @@ class PolymarketWatcher:
                     price=price,
                     value=value,
                     ts=ts_str,
-                    market_id=market_id,
-                    wallet=wallet
+                    market_id=market_id
                 )
 
         except (json.JSONDecodeError, TypeError):
