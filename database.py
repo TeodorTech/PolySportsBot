@@ -41,8 +41,13 @@ class Database:
                             external_ts TEXT,
                             is_win BOOLEAN DEFAULT NULL, 
                             market_id TEXT,             
+                            wallet_address TEXT,
                             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
                         );
+                    ''')
+                    # Ensure column exists if table was created before
+                    cur.execute('''
+                        ALTER TABLE signals ADD COLUMN IF NOT EXISTS wallet_address TEXT;
                     ''')
             print("[DB INFO] Database schema initialized.")
         except Exception as e:
@@ -51,7 +56,7 @@ class Database:
             conn.close()
 
     @staticmethod
-    def save_signal(event_name: str, outcome: str, side: str, price: float, value: float, ts: str, market_id: str):
+    def save_signal(event_name: str, outcome: str, side: str, price: float, value: float, ts: str, market_id: str, wallet: str = None):
         """Save a new signal to the database if the connection is available."""
         conn = Database.get_connection()
         if not conn:
@@ -62,9 +67,9 @@ class Database:
                 with conn.cursor() as cur:
                     cur.execute('''
                         INSERT INTO signals 
-                        (event_name, outcome, side, price, trade_value, timestamp_utc, external_ts, market_id)
-                        VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s, %s)
-                    ''', (event_name, outcome, side, price, value, ts, market_id))
+                        (event_name, outcome, side, price, trade_value, timestamp_utc, external_ts, market_id, wallet_address)
+                        VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s, %s, %s)
+                    ''', (event_name, outcome, side, price, value, ts, market_id, wallet))
             print("  [DB INFO] Signal saved to database.")
         except Exception as e:
             print(f"  [DB ERROR] Failed to save signal: {e}")

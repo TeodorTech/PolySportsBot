@@ -65,6 +65,7 @@ class PolymarketWatcher:
                 size = float(msg.get("size") or 0)
                 side = msg.get("side", "N/A")
                 ts_raw = msg.get("timestamp", "")
+                wallet = msg.get("maker") or msg.get("taker") or "N/A"
                 value = price * size
 
                 # Filter: BUY ONLY
@@ -113,7 +114,8 @@ class PolymarketWatcher:
                     price=price,
                     value=value,
                     ts=ts_str,
-                    market_id=market_id
+                    market_id=market_id,
+                    wallet=wallet
                 )
 
         except (json.JSONDecodeError, TypeError):
