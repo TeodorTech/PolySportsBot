@@ -77,6 +77,7 @@ class PolymarketWatcher:
 
                 # Metadata
                 event_name = self.token_to_event.get(token_id, "Unknown")
+                market_name = self.token_to_market.get(token_id, "N/A")
                 outcome_name = self.token_to_outcome.get(token_id, "Unknown")
                 market_id = self.token_to_mktid.get(token_id, "N/A")
 
@@ -98,6 +99,7 @@ class PolymarketWatcher:
                 # Send Alert
                 Notifier.send_signal(
                     event_name=event_name,
+                    market_name=market_name,
                     outcome=outcome_name,
                     side=side,
                     price=price,

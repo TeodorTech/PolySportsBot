@@ -77,45 +77,54 @@ def build_lookup_tables(events: list[dict]):
         volume = float(event.get("volume") or 0)
         event_to_volume[event_name] = volume
 
-        # Only the first market per event (moneyline)
-        market = markets[0]
-        market_id = str(market.get("id", "N/A"))
-        market_name = market.get("question") or market.get("groupItemTitle") or "N/A"
-        
-        # Token IDs
-        clob_raw = market.get("clobTokenIds")
-        if isinstance(clob_raw, str):
-            try:
-                clob_ids = json.loads(clob_raw)
-            except json.JSONDecodeError:
-                clob_ids = [clob_raw]
-        elif isinstance(clob_raw, list):
-            clob_ids = clob_raw
-        else:
-            clob_ids = []
+        for market in markets:
+            # Filter for Moneyline markets ONLY.
+            # Skip markets that are clearly Spreads, Totals, or Over/Unders.
+            group_title = (market.get("groupItemTitle") or "").lower()
+            question = (market.get("question") or "").lower()
+            
+            is_non_moneyline = any(x in group_title or x in question 
+                                  for x in ["spread", "total", "handicap", "over/under"])
+            if is_non_moneyline:
+                continue
 
-        # Outcomes
-        outcomes_raw = market.get("outcomes")
-        if isinstance(outcomes_raw, str):
-            try:
-                outcomes = json.loads(outcomes_raw)
-            except json.JSONDecodeError:
+            market_id = str(market.get("id", "N/A"))
+            market_name = market.get("groupItemTitle") or market.get("question") or "N/A"
+            
+            # Token IDs
+            clob_raw = market.get("clobTokenIds")
+            if isinstance(clob_raw, str):
+                try:
+                    clob_ids = json.loads(clob_raw)
+                except json.JSONDecodeError:
+                    clob_ids = [clob_raw]
+            elif isinstance(clob_raw, list):
+                clob_ids = clob_raw
+            else:
+                clob_ids = []
+
+            # Outcomes
+            outcomes_raw = market.get("outcomes")
+            if isinstance(outcomes_raw, str):
+                try:
+                    outcomes = json.loads(outcomes_raw)
+                except json.JSONDecodeError:
+                    outcomes = []
+            elif isinstance(outcomes_raw, list):
+                outcomes = outcomes_raw
+            else:
                 outcomes = []
-        elif isinstance(outcomes_raw, list):
-            outcomes = outcomes_raw
-        else:
-            outcomes = []
 
-        start_time = event.get("startTime") or event.get("startDate")
+            start_time = event.get("startTime") or event.get("startDate")
 
-        for i, token_id in enumerate(clob_ids):
-            token_to_event[token_id] = event_name
-            token_to_market[token_id] = market_name
-            token_to_mktid[token_id] = market_id
-            if start_time:
-                token_to_start_time[token_id] = start_time
-            if i < len(outcomes):
-                token_to_outcome[token_id] = str(outcomes[i])
+            for i, token_id in enumerate(clob_ids):
+                token_to_event[token_id] = event_name
+                token_to_market[token_id] = market_name
+                token_to_mktid[token_id] = market_id
+                if start_time:
+                    token_to_start_time[token_id] = start_time
+                if i < len(outcomes):
+                    token_to_outcome[token_id] = str(outcomes[i])
 
     return (token_to_event, token_to_market, token_to_mktid, 
             event_to_volume, token_to_start_time, token_to_outcome)

@@ -7,7 +7,7 @@ class Notifier:
     """Service for delivering signals to console and Telegram."""
     
     @staticmethod
-    def build_signal_lines(event_name, outcome, side, price, value, ts):
+    def build_signal_lines(event_name, market_name, outcome, side, price, value, ts):
         """Build pretty plain-text lines for console."""
         # Emoji decision
         if value < 200_000:
@@ -25,6 +25,7 @@ class Notifier:
             sep,
             f"  {header}",
             sep,
+            f"  MARKET  : {market_name}",
             f"  {bet_info}",
             f"  Price   : ${price:.4f}",
             f"  Value   : ${value:>12,.2f}",
@@ -33,9 +34,9 @@ class Notifier:
         ]
 
     @classmethod
-    def send_signal(cls, event_name, outcome, side, price, value, ts):
+    def send_signal(cls, event_name, market_name, outcome, side, price, value, ts):
         """Log to console and push to Telegram."""
-        lines = cls.build_signal_lines(event_name, outcome, side, price, value, ts)
+        lines = cls.build_signal_lines(event_name, market_name, outcome, side, price, value, ts)
         print("\n" + "\n".join(lines))
 
         if TELEGRAM_ENABLED:
