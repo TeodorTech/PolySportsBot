@@ -3,46 +3,133 @@
 @theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-
   --font-sans: var(--font-inter);
+  --font-display: var(--font-space-grotesk);
 }
 
+/* ── Design tokens ── */
 :root {
-  --background: #09090b;
-  --foreground: #fafafa;
-  --card: #18181b;
-  --card-foreground: #fafafa;
-  --popover: #09090b;
-  --popover-foreground: #fafafa;
-  --primary: #3b82f6;
-  --primary-foreground: #eff6ff;
-  --secondary: #27272a;
-  --secondary-foreground: #fafafa;
-  --muted: #27272a;
-  --muted-foreground: #a1a1aa;
-  --accent: #27272a;
-  --accent-foreground: #fafafa;
-  --destructive: #ef4444;
-  --destructive-foreground: #fafafa;
-  --border: #27272a;
-  --input: #27272a;
-  --ring: #3b82f6;
-  --radius: 0.5rem;
+  --bg:       #111318;
+  --surface:  #1C2028;
+  --surface2: #242830;
+  --border:   #2D3340;
+  --border2:  #3A4155;
+  --text:     #FFFFFF;
+  --muted:    #9099AB;
+  --subtle:   #5C6578;
+  --amber:    #F59E0B;
+  --amber-dk: #D97706;
+  --green:    #22C55E;
+  --red:      #EF4444;
+  --radius:   0.75rem;
+
+  /* legacy compat */
+  --background: #111318;
+  --foreground:  #FFFFFF;
+  --card:        #1C2028;
+  --border-color: #2D3340;
+  --primary:     #F59E0B;
+  --destructive: #EF4444;
+  --muted-foreground: #9099AB;
 }
 
 @layer base {
-  * {
-    @apply border-zinc-800;
-  }
+  * { border-color: #2D3340; }
   body {
-    @apply bg-zinc-950 text-zinc-100;
+    background-color: #111318;
+    color: #FFFFFF;
   }
 }
 
-.glass {
-  @apply bg-zinc-900/50 backdrop-blur-xl border border-zinc-800/50;
+/* ── Card hover: simple lift, no glow ── */
+.card-hover {
+  transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+}
+.card-hover:hover {
+  border-color: #3A4155 !important;
+  background-color: #242830 !important;
+  transform: translateY(-1px);
 }
 
-.card-hover {
-  @apply transition-all duration-300 hover:border-zinc-700 hover:bg-zinc-900/80;
+/* ── Accent text ── */
+.text-amber { color: #F59E0B; }
+.text-green  { color: #22C55E; }
+.text-red    { color: #EF4444; }
+.text-muted  { color: #9099AB; }
+
+/* ── Buttons ── */
+.btn-primary {
+  background: #F59E0B;
+  color: #111318;
+  font-weight: 800;
+  padding: 0.875rem 1.75rem;
+  border-radius: 0.75rem;
+  transition: background 0.15s ease, transform 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
 }
+.btn-primary:hover {
+  background: #D97706;
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid #2D3340;
+  color: #FFFFFF;
+  font-weight: 700;
+  padding: 0.875rem 1.75rem;
+  border-radius: 0.75rem;
+  transition: border-color 0.15s ease, color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+.btn-secondary:hover {
+  border-color: #F59E0B;
+  color: #F59E0B;
+}
+
+/* ── Live dot ── */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+.live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22C55E;
+  animation: live-pulse 1.8s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+/* ── Confidence bar ── */
+.confidence-bar {
+  height: 3px;
+  border-radius: 9999px;
+  background: #2D3340;
+  overflow: hidden;
+}
+.confidence-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: #F59E0B;
+  transition: width 0.5s ease;
+}
+
+/* ── Section container (named .wrap to avoid Tailwind v4 .container conflict) ── */
+.wrap {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+@media (min-width: 640px)  { .wrap { padding: 0 2rem; } }
+@media (min-width: 1024px) { .wrap { padding: 0 3rem; } }
+
+/* ── Divider ── */
+.divider { border-top: 1px solid #2D3340; }

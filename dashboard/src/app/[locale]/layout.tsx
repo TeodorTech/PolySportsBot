@@ -7,8 +7,8 @@ import { getMessages } from 'next-intl/server';
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "PolySports Whale Watcher",
-  description: "Track the biggest bets on Polymarket",
+  title: "PolySports — Whale Tracker",
+  description: "Follow the smart money on Polymarket sports markets.",
 };
 
 export default async function LocaleLayout({
@@ -19,18 +19,15 @@ export default async function LocaleLayout({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-
-
-  // Receiving messages provided in `i18n/request.ts`
   const messages = await getMessages();
 
   return (
-    <html lang={locale} className="dark">
-      <body className={`${inter.className} bg-zinc-950 text-zinc-100 antialiased min-h-screen`}>
+    <html lang={locale}>
+      <body className={`${inter.className} antialiased min-h-screen`} style={{backgroundColor: 'var(--bg)', color: 'var(--text)'}}>
         <NextIntlClientProvider messages={messages}>
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-10">
+          <main className="wrap py-8 md:py-14">
             {children}
-          </div>
+          </main>
         </NextIntlClientProvider>
       </body>
     </html>

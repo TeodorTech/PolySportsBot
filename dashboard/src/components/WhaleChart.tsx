@@ -6,6 +6,8 @@ interface WhaleChartProps {
   data: { outcome: string; value: number }[];
 }
 
+const COLORS = ['#F59E0B', '#22C55E', '#60A5FA', '#EF4444', '#A78BFA', '#FB923C'];
+
 export default function WhaleChart({ data }: WhaleChartProps) {
   return (
     <div className="h-64 md:h-80 w-full">
@@ -13,31 +15,47 @@ export default function WhaleChart({ data }: WhaleChartProps) {
         <BarChart
           data={data}
           layout="vertical"
-          margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+          margin={{ top: 5, right: 16, left: 0, bottom: 5 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#2D3340" horizontal={false} />
           <XAxis
             type="number"
-            stroke="#71717a"
+            stroke="#5C6578"
             fontSize={11}
-            tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(value) => {
+              if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+              if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}k`;
+              return `$${value}`;
+            }}
           />
           <YAxis
             dataKey="outcome"
             type="category"
-            stroke="#71717a"
+            stroke="#5C6578"
             fontSize={11}
-            width={80}
-            tickFormatter={(value: string) => value.length > 10 ? value.slice(0, 10) + '\u2026' : value}
+            width={84}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(value: string) => value.length > 11 ? value.slice(0, 11) + '…' : value}
           />
           <Tooltip
-            cursor={{ fill: '#27272a', opacity: 0.4 }}
-            contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px' }}
-            formatter={(value: any) => [`$${Number(value).toLocaleString()}`, 'Whale Volume']}
+            cursor={{ fill: 'rgba(45, 51, 64, 0.4)' }}
+            contentStyle={{
+              backgroundColor: '#1C2028',
+              border: '1px solid #2D3340',
+              borderRadius: '8px',
+              color: '#FFFFFF',
+              fontSize: 13,
+            }}
+            labelStyle={{ color: '#9099AB' }}
+            itemStyle={{ color: '#FFFFFF' }}
+            formatter={(value) => [`$${Number(value ?? 0).toLocaleString()}`, 'Whale Volume']}
           />
-          <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-            {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={index === 0 ? '#3b82f6' : '#6366f1'} />
+          <Bar dataKey="value" radius={[0, 6, 6, 0]}>
+            {data.map((_, index) => (
+              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
             ))}
           </Bar>
         </BarChart>
