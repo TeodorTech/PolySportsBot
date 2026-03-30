@@ -1,0 +1,24 @@
+{
+  "Dashboard": {
+    "title": "PolySports Whale Watcher",
+    "subtitle": "High-performance tracking for Polymarket's biggest bets",
+    "whaleSuccessRate": "Whale Success Rate",
+    "upcomingEvents": "Upcoming High-Volume Events",
+    "noEvents": "No events found with $1M+ volume",
+    "volume": "Volume",
+    "whalesWon": "Whales Won",
+    "settled": "Settled",
+    "ongoing": "Ongoing",
+    "whaleMoneyBreakdown": "Whale Money Breakdown",
+    "whaleActivity": "Whale Activity",
+    "outcome": "Outcome",
+    "side": "Side",
+    "price": "Price",
+    "value": "Value",
+    "timestamp": "Timestamp",
+    "admin": "Admin Controls",
+    "settleWhalesWon": "Whales Won",
+    "settleWhalesLost": "Whales Lost",
+    "notSettled": "Not Settled"
+  }
+}

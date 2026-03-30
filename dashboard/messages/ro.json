@@ -1,0 +1,24 @@
+{
+  "Dashboard": {
+    "title": "PolySports Whale Watcher",
+    "subtitle": "Monitorizare de înaltă performanță pentru cele mai mari pariuri pe Polymarket",
+    "whaleSuccessRate": "Rata de Succes a Balenelor",
+    "upcomingEvents": "Evenimente Viitoare cu Volum Mare",
+    "noEvents": "Nu au fost găsite evenimente cu volum de peste 1 milion USD",
+    "volume": "Volum",
+    "whalesWon": "Balene Câștigătoare",
+    "settled": "Finalizat",
+    "ongoing": "În curs",
+    "whaleMoneyBreakdown": "Distribuția Banilor Balenelor",
+    "whaleActivity": "Activitatea Balenelor",
+    "outcome": "Rezultat",
+    "side": "Parte",
+    "price": "Preț",
+    "value": "Valoare",
+    "timestamp": "Timestamp",
+    "admin": "Control Admin",
+    "settleWhalesWon": "Balene Câștigătoare",
+    "settleWhalesLost": "Balene Pierzătoare",
+    "notSettled": "Nefinalizat"
+  }
+}
