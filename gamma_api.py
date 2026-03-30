@@ -84,7 +84,12 @@ def build_lookup_tables(events: list[dict]):
             question = (market.get("question") or "").lower()
             
             is_non_moneyline = any(x in group_title or x in question 
-                                  for x in ["spread", "total", "handicap", "over/under"])
+                                  for x in ["spread", "total", "handicap", "over", "under", "more than", "less than"])
+            
+            # Also catch things like "Chiefs -3.5" or "Over 44.5"
+            if ".5" in question or ".5" in group_title:
+                is_non_moneyline = True
+
             if is_non_moneyline:
                 continue
 
@@ -128,3 +133,4 @@ def build_lookup_tables(events: list[dict]):
 
     return (token_to_event, token_to_market, token_to_mktid, 
             event_to_volume, token_to_start_time, token_to_outcome)
+
