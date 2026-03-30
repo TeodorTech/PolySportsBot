@@ -30,29 +30,36 @@ class Database:
             with conn:
                 with conn.cursor() as cur:
                     cur.execute('''
-                        CREATE TABLE IF NOT EXISTS signals (
+                        CREATE TABLE IF NOT EXISTS events (
+                            id TEXT PRIMARY KEY,
+                            title TEXT NOT NULL,
+                            total_volume DECIMAL(18, 2),
+                            whales_won BOOLEAN DEFAULT NULL,
+                            status TEXT,
+                            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                        );
+
+                        CREATE TABLE IF NOT EXISTS whale_activity (
                             id SERIAL PRIMARY KEY,
-                            event_name TEXT NOT NULL,
+                            event_id TEXT REFERENCES events(id),
                             outcome TEXT NOT NULL,
                             side TEXT,
                             price DECIMAL(10, 4),
                             trade_value DECIMAL(18, 2),
                             timestamp_utc TIMESTAMP WITH TIME ZONE,
                             external_ts TEXT,
-                            is_win BOOLEAN DEFAULT NULL, 
-                            market_id TEXT,             
                             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
                         );
                     ''')
-            print("[DB INFO] Database schema initialized.")
+            print("[DB INFO] Database schema initialized (Events & Whale Activity).")
         except Exception as e:
             print(f"[DB ERROR] Schema initialization failed: {e}")
         finally:
             conn.close()
 
     @staticmethod
-    def save_signal(event_name: str, outcome: str, side: str, price: float, value: float, ts: str, market_id: str):
-        """Save a new signal to the database if the connection is available."""
+    def save_whale_activity(event_name: str, total_volume: float, outcome: str, side: str, price: float, value: float, ts: str, market_id: str):
+        """Save a new whale activity to the database, processing the event upsert first."""
         conn = Database.get_connection()
         if not conn:
             return
@@ -60,13 +67,22 @@ class Database:
         try:
             with conn:
                 with conn.cursor() as cur:
+                    # 1. UPSERT the event
                     cur.execute('''
-                        INSERT INTO signals 
-                        (event_name, outcome, side, price, trade_value, timestamp_utc, external_ts, market_id)
-                        VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s, %s)
-                    ''', (event_name, outcome, side, price, value, ts, market_id))
-            print("  [DB INFO] Signal saved to database.")
+                        INSERT INTO events (id, title, total_volume, status)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (id) DO UPDATE 
+                        SET title = EXCLUDED.title, total_volume = EXCLUDED.total_volume
+                    ''', (market_id, event_name, total_volume, 'active'))
+
+                    # 2. INSERT the whale activity
+                    cur.execute('''
+                        INSERT INTO whale_activity 
+                        (event_id, outcome, side, price, trade_value, timestamp_utc, external_ts)
+                        VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s)
+                    ''', (market_id, outcome, side, price, value, ts))
+            print("  [DB INFO] Whale activity saved to database.")
         except Exception as e:
-            print(f"  [DB ERROR] Failed to save signal: {e}")
+            print(f"  [DB ERROR] Failed to save whale activity: {e}")
         finally:
             conn.close()

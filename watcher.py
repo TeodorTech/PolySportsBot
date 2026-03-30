@@ -107,9 +107,13 @@ class PolymarketWatcher:
                     ts=ts_str
                 )
 
+                # Fetch the total volume for the event
+                total_volume = self.event_to_volume.get(event_name, 0)
+                
                 # Save to Database
-                Database.save_signal(
+                Database.save_whale_activity(
                     event_name=event_name,
+                    total_volume=total_volume,
                     outcome=outcome_name,
                     side=side,
                     price=price,
