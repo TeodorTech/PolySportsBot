@@ -58,7 +58,7 @@ class Database:
             conn.close()
 
     @staticmethod
-    def save_whale_activity(event_name: str, total_volume: float, outcome: str, side: str, price: float, value: float, ts: str, market_id: str):
+    def save_whale_activity(event_id: str, event_name: str, total_volume: float, outcome: str, side: str, price: float, value: float, ts: str):
         """Save a new whale activity to the database, processing the event upsert first."""
         conn = Database.get_connection()
         if not conn:
@@ -67,21 +67,21 @@ class Database:
         try:
             with conn:
                 with conn.cursor() as cur:
-                    # 1. UPSERT the event
+                    # 1. UPSERT the event (using the real Event ID)
                     cur.execute('''
                         INSERT INTO events (id, title, total_volume, status)
                         VALUES (%s, %s, %s, %s)
                         ON CONFLICT (id) DO UPDATE 
                         SET title = EXCLUDED.title, total_volume = EXCLUDED.total_volume
-                    ''', (market_id, event_name, total_volume, 'active'))
+                    ''', (event_id, event_name, total_volume, 'active'))
 
                     # 2. INSERT the whale activity
                     cur.execute('''
                         INSERT INTO whale_activity 
                         (event_id, outcome, side, price, trade_value, timestamp_utc, external_ts)
                         VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s)
-                    ''', (market_id, outcome, side, price, value, ts))
-            print("  [DB INFO] Whale activity saved to database.")
+                    ''', (event_id, outcome, side, price, value, ts))
+            print(f"  [DB INFO] Whale activity saved to database (Vol: ${total_volume:,.0f}).")
         except Exception as e:
             print(f"  [DB ERROR] Failed to save whale activity: {e}")
         finally:

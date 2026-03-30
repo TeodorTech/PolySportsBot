@@ -12,7 +12,7 @@ class PolymarketWatcher:
     """Manager for WebSocket trades and Periodic refreshes."""
     def __init__(self, asset_ids, token_to_event, token_to_market, 
                  token_to_mktid, event_to_volume, token_to_start_time, 
-                 token_to_outcome):
+                 token_to_outcome, token_to_event_id):
         self.asset_ids = asset_ids
         self.token_to_event = token_to_event
         self.token_to_market = token_to_market
@@ -20,6 +20,7 @@ class PolymarketWatcher:
         self.event_to_volume = event_to_volume
         self.token_to_start_time = token_to_start_time
         self.token_to_outcome = token_to_outcome
+        self.token_to_event_id = token_to_event_id
         
         self.ws = None
         self._ping_thread = None
@@ -107,19 +108,29 @@ class PolymarketWatcher:
                     ts=ts_str
                 )
 
-                # Fetch the total volume for the event
-                total_volume = self.event_to_volume.get(event_name, 0)
+                # Fetch real-time total volume for the event from Polymarket
+                event_id = self.token_to_event_id.get(token_id)
+                total_volume = 0
+                if event_id:
+                    try:
+                        event_data = GammaAPI.fetch_event_details(event_id)
+                        total_volume = float(event_data.get("volume") or 0)
+                        # Optionally update our local cache
+                        self.event_to_volume[event_name] = total_volume
+                    except Exception as e:
+                        print(f"  [VOL ERROR] Failed to fetch latest volume: {e}")
+                        total_volume = self.event_to_volume.get(event_name, 0)
                 
                 # Save to Database
                 Database.save_whale_activity(
+                    event_id=event_id,
                     event_name=event_name,
                     total_volume=total_volume,
                     outcome=outcome_name,
                     side=side,
                     price=price,
                     value=value,
-                    ts=ts_str,
-                    market_id=market_id
+                    ts=ts_str
                 )
 
         except (json.JSONDecodeError, TypeError):
@@ -159,7 +170,7 @@ class PolymarketWatcher:
                 print("\n[REFRESH] Scanning for new qualifying events...")
                 events = GammaAPI.fetch_all_sports_events()
                 (new_t2e, new_t2m, new_t2mi, new_e2v, 
-                 new_t2st, new_t2o) = build_lookup_tables(events)
+                 new_t2st, new_t2o, new_t2ei) = build_lookup_tables(events)
                 
                 new_ids = sorted(list(new_t2e.keys()))
                 if new_ids != sorted(self.asset_ids):
@@ -171,6 +182,7 @@ class PolymarketWatcher:
                     self.event_to_volume = new_e2v
                     self.token_to_start_time = new_t2st
                     self.token_to_outcome = new_t2o
+                    self.token_to_event_id = new_t2ei
                     self.subscribe()
             except Exception as exc:
                 print(f"[REFRESH ERROR] Failed to refresh: {exc}")

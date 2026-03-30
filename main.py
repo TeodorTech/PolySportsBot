@@ -29,7 +29,8 @@ def main() -> None:
 
     # Step 2 — Build lookup tables
     (token_to_event, token_to_market, token_to_mktid, 
-     event_to_volume, token_to_start_time, token_to_outcome) = build_lookup_tables(events)
+     event_to_volume, token_to_start_time, token_to_outcome,
+     token_to_event_id) = build_lookup_tables(events)
     
     all_token_ids = list(token_to_event.keys())
     if not all_token_ids:
@@ -51,7 +52,8 @@ def main() -> None:
         token_to_mktid=token_to_mktid,
         event_to_volume=event_to_volume,
         token_to_start_time=token_to_start_time,
-        token_to_outcome=token_to_outcome
+        token_to_outcome=token_to_outcome,
+        token_to_event_id=token_to_event_id
     )
     
     try:

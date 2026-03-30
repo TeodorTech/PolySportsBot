@@ -10,9 +10,9 @@ class Notifier:
     def build_signal_lines(event_name, market_name, outcome, side, price, value, ts):
         """Build pretty plain-text lines for console."""
         # Emoji decision
-        if value < 200_000:
+        if value < 100_000:
             emoji = "🦀"
-        elif value < 450_000:
+        elif value < 250_000:
             emoji = "🦈"
         else:
             emoji = "🐳"

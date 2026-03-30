@@ -53,13 +53,21 @@ class GammaAPI:
         ]
         return filtered
 
+    @staticmethod
+    def fetch_event_details(event_id: str) -> dict:
+        """Fetch details for a single event by ID."""
+        response = requests.get(f"{GAMMA_API_URL}/events/{event_id}")
+        response.raise_for_status()
+        return response.json()
+
 
 def build_lookup_tables(events: list[dict]):
     """
     Build lookup dicts keyed by CLOB token ID.
     Returns:
         token_to_event, token_to_market, token_to_mktid, 
-        event_to_volume, token_to_start_time, token_to_outcome
+        event_to_volume, token_to_start_time, token_to_outcome,
+        token_to_event_id
     """
     token_to_event = {}
     token_to_market = {}
@@ -67,6 +75,7 @@ def build_lookup_tables(events: list[dict]):
     event_to_volume = {}
     token_to_start_time = {}
     token_to_outcome = {}
+    token_to_event_id = {}
 
     for event in events:
         markets = event.get("markets", [])
@@ -74,6 +83,7 @@ def build_lookup_tables(events: list[dict]):
             continue
 
         event_name = event.get("title") or event.get("slug") or "N/A"
+        event_id = str(event.get("id"))
         volume = float(event.get("volume") or 0)
         event_to_volume[event_name] = volume
 
@@ -126,11 +136,13 @@ def build_lookup_tables(events: list[dict]):
                 token_to_event[token_id] = event_name
                 token_to_market[token_id] = market_name
                 token_to_mktid[token_id] = market_id
+                token_to_event_id[token_id] = event_id
                 if start_time:
                     token_to_start_time[token_id] = start_time
                 if i < len(outcomes):
                     token_to_outcome[token_id] = str(outcomes[i])
 
     return (token_to_event, token_to_market, token_to_mktid, 
-            event_to_volume, token_to_start_time, token_to_outcome)
+            event_to_volume, token_to_start_time, token_to_outcome,
+            token_to_event_id)
 
