@@ -67,11 +67,18 @@ class Database:
         try:
             with conn:
                 with conn.cursor() as cur:
-                    # 1. UPSERT the event (using the real Event ID)
+                    # 1. Check if an event with the same title already exists (Polymarket
+                    #    may return a different id for the same real-world event after restart).
+                    cur.execute('SELECT id FROM events WHERE title = %s LIMIT 1', (event_name,))
+                    row = cur.fetchone()
+                    if row:
+                        event_id = row[0]
+
+                    # 2. UPSERT the event (using the real Event ID)
                     cur.execute('''
                         INSERT INTO events (id, title, total_volume, status)
                         VALUES (%s, %s, %s, %s)
-                        ON CONFLICT (id) DO UPDATE 
+                        ON CONFLICT (id) DO UPDATE
                         SET title = EXCLUDED.title, total_volume = EXCLUDED.total_volume
                     ''', (event_id, event_name, total_volume, 'active'))
 
