@@ -85,9 +85,12 @@ export default async function DashboardPage({ params, searchParams }: { params: 
               {t('title')}
             </span>
           </div>
-          <div className="flex gap-4">
-            <Link href="/en" className="text-xs uppercase tracking-widest hover:opacity-100 transition-opacity" style={{color: locale === 'en' ? 'var(--amber)' : 'var(--subtle)'}}>EN</Link>
-            <Link href="/ro" className="text-xs uppercase tracking-widest hover:opacity-100 transition-opacity" style={{color: locale === 'ro' ? 'var(--amber)' : 'var(--subtle)'}}>RO</Link>
+          <div className="flex items-center gap-5">
+            <Link href={`/${locale}/stats`} className="text-xs font-semibold uppercase tracking-widest hover:opacity-100 transition-opacity" style={{color: 'var(--subtle)'}}>Stats</Link>
+            <div className="flex gap-4">
+              <Link href="/en" className="text-xs uppercase tracking-widest hover:opacity-100 transition-opacity" style={{color: locale === 'en' ? 'var(--amber)' : 'var(--subtle)'}}>EN</Link>
+              <Link href="/ro" className="text-xs uppercase tracking-widest hover:opacity-100 transition-opacity" style={{color: locale === 'ro' ? 'var(--amber)' : 'var(--subtle)'}}>RO</Link>
+            </div>
           </div>
         </div>
 
