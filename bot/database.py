@@ -34,6 +34,7 @@ class Database:
                             id TEXT PRIMARY KEY,
                             title TEXT NOT NULL,
                             total_volume DECIMAL(18, 2),
+                            odds DECIMAL(10, 2),
                             whales_won BOOLEAN DEFAULT NULL,
                             status TEXT,
                             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
