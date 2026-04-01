@@ -2,6 +2,25 @@ import requests
 import json
 from config import GAMMA_API_URL, DATA_API_URL, SPORTS_TAG_ID, MIN_EVENT_VOLUME
 
+# Tag IDs that are too generic to use as a sport label
+_GENERIC_TAG_IDS = {1, 100639}  # "Sports", "Games"
+
+# Preferred label priority: higher = more specific/recognisable
+# Any label not listed gets priority 0
+_LABEL_PRIORITY = {
+    # Leagues / organisations (most specific)
+    'nfl': 10, 'nba': 10, 'mlb': 10, 'nhl': 10, 'nascar': 10,
+    'pga': 10, 'ufc': 10, 'mma': 10,
+    'premier league': 10, 'champions league': 10, 'la liga': 10,
+    'serie a': 10, 'bundesliga': 10, 'ligue 1': 10,
+    'indian premier league': 10,
+    'esports': 9, 'counter strike 2': 9, 'league of legends': 9,
+    # Generic sport names (less specific but still useful)
+    'basketball': 5, 'football': 5, 'soccer': 5, 'baseball': 5,
+    'hockey': 5, 'tennis': 5, 'golf': 5, 'cricket': 5, 'rugby': 5,
+    'boxing': 5, 'racing': 5,
+}
+
 class GammaAPI:
     """Client for interacting with the Polymarket Gamma API."""
     
@@ -63,17 +82,27 @@ class GammaAPI:
 
 def extract_sport_label(event: dict) -> str:
     """
-    Extract the sport label from an event's tags array.
-    Returns the first tag label that isn't the top-level Sports tag,
-    falling back to 'Sports' if nothing more specific is found.
+    Extract the most specific sport label from an event's tags array.
+    Skips generic tags (id 1 = 'Sports', id 100639 = 'Games') and picks
+    the label with the highest known priority, falling back to 'Sports'.
     """
     tags = event.get("tags") or []
+    best_label = None
+    best_priority = -1
+
     for tag in tags:
         tag_id = tag.get("id")
+        if tag_id in _GENERIC_TAG_IDS:
+            continue
         label = (tag.get("label") or "").strip()
-        if label and tag_id != SPORTS_TAG_ID:
-            return label
-    return "Sports"
+        if not label:
+            continue
+        priority = _LABEL_PRIORITY.get(label.lower(), 0)
+        if priority > best_priority:
+            best_priority = priority
+            best_label = label
+
+    return best_label or "Sports"
 
 
 def build_lookup_tables(events: list[dict]):
