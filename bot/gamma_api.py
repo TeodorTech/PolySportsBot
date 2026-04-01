@@ -61,13 +61,28 @@ class GammaAPI:
         return response.json()
 
 
+def extract_sport_label(event: dict) -> str:
+    """
+    Extract the sport label from an event's tags array.
+    Returns the first tag label that isn't the top-level Sports tag,
+    falling back to 'Sports' if nothing more specific is found.
+    """
+    tags = event.get("tags") or []
+    for tag in tags:
+        tag_id = tag.get("id")
+        label = (tag.get("label") or "").strip()
+        if label and tag_id != SPORTS_TAG_ID:
+            return label
+    return "Sports"
+
+
 def build_lookup_tables(events: list[dict]):
     """
     Build lookup dicts keyed by CLOB token ID.
     Returns:
-        token_to_event, token_to_market, token_to_mktid, 
+        token_to_event, token_to_market, token_to_mktid,
         event_to_volume, token_to_start_time, token_to_outcome,
-        token_to_event_id
+        token_to_event_id, token_to_sport
     """
     token_to_event = {}
     token_to_market = {}
@@ -76,6 +91,7 @@ def build_lookup_tables(events: list[dict]):
     token_to_start_time = {}
     token_to_outcome = {}
     token_to_event_id = {}
+    token_to_sport = {}
 
     for event in events:
         markets = event.get("markets", [])
@@ -85,6 +101,7 @@ def build_lookup_tables(events: list[dict]):
         event_name = event.get("title") or event.get("slug") or "N/A"
         event_id = str(event.get("id"))
         volume = float(event.get("volume") or 0)
+        sport = extract_sport_label(event)
         event_to_volume[event_name] = volume
 
         for market in markets:
@@ -137,12 +154,13 @@ def build_lookup_tables(events: list[dict]):
                 token_to_market[token_id] = market_name
                 token_to_mktid[token_id] = market_id
                 token_to_event_id[token_id] = event_id
+                token_to_sport[token_id] = sport
                 if start_time:
                     token_to_start_time[token_id] = start_time
                 if i < len(outcomes):
                     token_to_outcome[token_id] = str(outcomes[i])
 
-    return (token_to_event, token_to_market, token_to_mktid, 
+    return (token_to_event, token_to_market, token_to_mktid,
             event_to_volume, token_to_start_time, token_to_outcome,
-            token_to_event_id)
+            token_to_event_id, token_to_sport)
 

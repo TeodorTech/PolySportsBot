@@ -28,10 +28,10 @@ def main() -> None:
     print(f"[INIT] Found {len(events)} qualifying events.\n")
 
     # Step 2 — Build lookup tables
-    (token_to_event, token_to_market, token_to_mktid, 
+    (token_to_event, token_to_market, token_to_mktid,
      event_to_volume, token_to_start_time, token_to_outcome,
-     token_to_event_id) = build_lookup_tables(events)
-    
+     token_to_event_id, token_to_sport) = build_lookup_tables(events)
+
     all_token_ids = list(token_to_event.keys())
     if not all_token_ids:
         print("[FATAL] No CLOB token IDs found in events. Exiting.")
@@ -53,7 +53,8 @@ def main() -> None:
         event_to_volume=event_to_volume,
         token_to_start_time=token_to_start_time,
         token_to_outcome=token_to_outcome,
-        token_to_event_id=token_to_event_id
+        token_to_event_id=token_to_event_id,
+        token_to_sport=token_to_sport
     )
     
     try:

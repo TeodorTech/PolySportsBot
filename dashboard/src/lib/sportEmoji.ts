@@ -1,4 +1,43 @@
-export function getSportEmoji(title: string): string {
+const SPORT_LABEL_MAP: Record<string, string> = {
+  'nfl': '🏈',
+  'american football': '🏈',
+  'nba': '🏀',
+  'basketball': '🏀',
+  'wnba': '🏀',
+  'soccer': '⚽',
+  'football': '⚽',
+  'mlb': '⚾',
+  'baseball': '⚾',
+  'tennis': '🎾',
+  'golf': '⛳',
+  'pga': '⛳',
+  'ufc': '🥊',
+  'mma': '🥊',
+  'boxing': '🥊',
+  'nhl': '🏒',
+  'hockey': '🏒',
+  'cricket': '🏏',
+  'ipl': '🏏',
+  'rugby': '🏉',
+  'formula 1': '🏎️',
+  'f1': '🏎️',
+  'racing': '🏎️',
+  'nascar': '🏎️',
+  'olympics': '🏅',
+  'olympic': '🏅',
+};
+
+export function getSportEmoji(title: string, sport?: string | null): string {
+  if (sport) {
+    const key = sport.toLowerCase();
+    if (SPORT_LABEL_MAP[key]) return SPORT_LABEL_MAP[key];
+    // Partial match for labels like "NFL Football" or "NBA Basketball"
+    for (const [label, emoji] of Object.entries(SPORT_LABEL_MAP)) {
+      if (key.includes(label)) return emoji;
+    }
+  }
+
+  // Fallback: title-based matching
   const t = title.toLowerCase();
   if (t.includes('nfl') || t.includes('super bowl') || (t.includes('football') && !t.includes('soccer'))) return '🏈';
   if (t.includes('nba') || t.includes('basketball')) return '🏀';

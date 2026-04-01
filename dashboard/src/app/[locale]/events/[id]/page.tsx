@@ -69,7 +69,7 @@ export default async function EventPage({
   if (!data) notFound();
 
   const t = await getTranslations('Dashboard');
-  const emoji = getSportEmoji(data.event.title);
+  const emoji = getSportEmoji(data.event.title, data.event.sport);
 
   const totalWhaleVolume = data.activity.reduce((a: number, b: WhaleTrade) => a + Number(b.trade_value), 0);
   const avgTradeSize = data.activity.length > 0 ? totalWhaleVolume / data.activity.length : 0;

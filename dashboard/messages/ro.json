@@ -75,6 +75,13 @@
     "glossaryEdge": "Rata de câștig reală minus cea implicată de piață. Pozitiv înseamnă că bate piața.",
     "glossaryExpected": "Suma probabilităților implicite împărțită la numărul de evenimente. Aceasta este performanța unui pariu aleatoriu.",
     "glossaryAdjusted": "Fiecare câștig este ponderat după dificultate (1/probabilitate implicită). Câștigurile mai dificile contează mai mult.",
-    "glossaryRoi": "Randamentul investiției folosind cotele finale. Afișat doar pentru evenimentele cu cote introduse."
+    "glossaryRoi": "Randamentul investiției folosind cotele finale. Afișat doar pentru evenimentele cu cote introduse.",
+    "sportBreakdown": "Pe Sport",
+    "consensusBreakdown": "Consensul Câștigă Mai Mult?",
+    "consensusDesc": "Rata de câștig în funcție de cât de unite erau balenele pe un rezultat",
+    "consensusGlossary": "Consens = % din volumul total al balenelor pe cel mai susținut rezultat.",
+    "winRate": "rată câștig",
+    "consensus": "Consens",
+    "glossaryConsensus": "% din volumul total al balenelor concentrat pe rezultatul principal. Consens ridicat = balenele au fost de acord puternic pe o parte."
   }
 }

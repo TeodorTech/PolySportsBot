@@ -29,9 +29,17 @@ async function getStats() {
 
 async function getTrendingMarkets() {
   return await sql`
-    SELECT e.id, e.title, e.total_volume, e.whales_won, e.status,
+    SELECT e.id, e.title, e.sport, e.total_volume, e.whales_won, e.status,
            COUNT(w.id) as whale_count,
-           SUM(w.trade_value) as whale_volume
+           SUM(w.trade_value) as whale_volume,
+           (
+             SELECT SUM(w2.trade_value)
+             FROM whale_activity w2
+             WHERE w2.event_id = e.id
+             GROUP BY w2.outcome
+             ORDER BY SUM(w2.trade_value) DESC
+             LIMIT 1
+           ) as top_outcome_volume
     FROM events e
     LEFT JOIN whale_activity w ON e.id = w.event_id
     WHERE e.whales_won IS NULL
@@ -46,7 +54,7 @@ const PAGE_SIZE = 10;
 async function getSettledMarkets(page: number) {
   const offset = (page - 1) * PAGE_SIZE;
   const rows = await sql`
-    SELECT e.id, e.title, e.total_volume, e.whales_won, e.odds,
+    SELECT e.id, e.title, e.sport, e.total_volume, e.whales_won, e.odds,
            COUNT(w.id) as whale_count
     FROM events e
     LEFT JOIN whale_activity w ON e.id = w.event_id
@@ -70,9 +78,6 @@ export default async function DashboardPage({ params, searchParams }: { params: 
     getSettledMarkets(page),
   ]);
 
-  const maxVolume = trending.length > 0
-    ? Math.max(...trending.map((e) => Number(e.whale_volume) || 0))
-    : 1;
 
   return (
     <div className="space-y-10 md:space-y-14">
@@ -153,9 +158,10 @@ export default async function DashboardPage({ params, searchParams }: { params: 
         ) : (
           <div className="divide-y" style={{borderColor: 'var(--border)'}}>
             {trending.map((event) => {
-              const emoji = getSportEmoji(event.title);
+              const emoji = getSportEmoji(event.title, event.sport);
               const whaleVolume = Number(event.whale_volume) || 0;
-              const confidence = maxVolume > 0 ? (whaleVolume / maxVolume) * 100 : 0;
+              const topVolume = Number(event.top_outcome_volume) || 0;
+              const consensus = whaleVolume > 0 ? (topVolume / whaleVolume) * 100 : 0;
 
               return (
                 <Link
@@ -178,7 +184,7 @@ export default async function DashboardPage({ params, searchParams }: { params: 
                     </div>
 
                     <div className="confidence-bar">
-                      <div className="confidence-bar-fill" style={{width: `${confidence}%`}} />
+                      <div className="confidence-bar-fill" style={{width: `${consensus}%`}} />
                     </div>
                   </div>
 
@@ -208,7 +214,7 @@ export default async function DashboardPage({ params, searchParams }: { params: 
         ) : (
           <div className="divide-y" style={{borderColor: 'var(--border)'}}>
             {settled.map((event) => {
-              const emoji = getSportEmoji(event.title);
+              const emoji = getSportEmoji(event.title, event.sport);
               const won = event.whales_won === true;
 
               return (

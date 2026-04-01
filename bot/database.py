@@ -34,6 +34,7 @@ class Database:
                             id TEXT PRIMARY KEY,
                             title TEXT NOT NULL,
                             total_volume DECIMAL(18, 2),
+                            sport TEXT,
                             odds DECIMAL(10, 2),
                             whales_won BOOLEAN DEFAULT NULL,
                             status TEXT,
@@ -59,7 +60,7 @@ class Database:
             conn.close()
 
     @staticmethod
-    def save_whale_activity(event_id: str, event_name: str, total_volume: float, outcome: str, side: str, price: float, value: float, ts: str):
+    def save_whale_activity(event_id: str, event_name: str, total_volume: float, outcome: str, side: str, price: float, value: float, ts: str, sport: str = 'Sports'):
         """Save a new whale activity to the database, processing the event upsert first."""
         conn = Database.get_connection()
         if not conn:
@@ -77,11 +78,12 @@ class Database:
 
                     # 2. UPSERT the event (using the real Event ID)
                     cur.execute('''
-                        INSERT INTO events (id, title, total_volume, status)
-                        VALUES (%s, %s, %s, %s)
+                        INSERT INTO events (id, title, total_volume, sport, status)
+                        VALUES (%s, %s, %s, %s, %s)
                         ON CONFLICT (id) DO UPDATE
-                        SET title = EXCLUDED.title, total_volume = EXCLUDED.total_volume
-                    ''', (event_id, event_name, total_volume, 'active'))
+                        SET title = EXCLUDED.title, total_volume = EXCLUDED.total_volume,
+                            sport = EXCLUDED.sport
+                    ''', (event_id, event_name, total_volume, sport, 'active'))
 
                     # 2. INSERT the whale activity
                     cur.execute('''

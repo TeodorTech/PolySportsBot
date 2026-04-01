@@ -75,6 +75,13 @@
     "glossaryEdge": "Actual win rate minus the market-implied win rate. Positive means beating the market.",
     "glossaryExpected": "Sum of all implied probabilities divided by event count. This is what a random bettor would achieve.",
     "glossaryAdjusted": "Each win is weighted by its difficulty (1/implied probability). Harder wins count more.",
-    "glossaryRoi": "Return on investment using settled odds. Only shown for events with odds entered."
+    "glossaryRoi": "Return on investment using settled odds. Only shown for events with odds entered.",
+    "sportBreakdown": "By Sport",
+    "consensusBreakdown": "Does Consensus Win More?",
+    "consensusDesc": "Win rate by how unified whale money was on one outcome",
+    "consensusGlossary": "Consensus = % of total whale volume on the single most-backed outcome.",
+    "winRate": "win rate",
+    "consensus": "Consensus",
+    "glossaryConsensus": "% of total whale volume concentrated on the top outcome. High consensus = whales agreed strongly on one side."
   }
 }
