@@ -34,8 +34,12 @@
     "statusWin": "Câștig",
     "statusLoss": "Pierdere",
     "admin": "Finalizare",
+    "adminQuestion": "— balenele au câștigat?",
+    "yes": "Da",
+    "no": "Nu",
     "settleWhalesWon": "✓ Balene Câștigătoare",
     "settleWhalesLost": "✗ Balene Pierzătoare",
-    "notSettled": "↺ Marchează ca Nefinalizat"
+    "notSettled": "↺ Marchează ca Nefinalizat",
+    "oddsPlaceholder": "Cotă (ex. 1.75)"
   }
 }

@@ -34,8 +34,12 @@
     "statusWin": "Win",
     "statusLoss": "Loss",
     "admin": "Settle",
+    "adminQuestion": "— whales made money?",
+    "yes": "Yes",
+    "no": "No",
     "settleWhalesWon": "✓ Whales Won",
     "settleWhalesLost": "✗ Whales Lost",
-    "notSettled": "↺ Mark as Unsettled"
+    "notSettled": "↺ Mark as Unsettled",
+    "oddsPlaceholder": "Odds (e.g. 1.75)"
   }
 }

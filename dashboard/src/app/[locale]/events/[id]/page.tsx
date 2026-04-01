@@ -47,9 +47,15 @@ async function getEventData(id: string) {
   };
 }
 
-async function toggleSettlement(eventId: string, locale: string, outcome: boolean | null) {
+async function toggleSettlement(formData: FormData) {
   'use server';
-  await sql`UPDATE events SET whales_won = ${outcome} WHERE id = ${eventId}`;
+  const eventId = formData.get('eventId') as string;
+  const locale = formData.get('locale') as string;
+  const outcomeRaw = formData.get('outcome') as string;
+  const outcome = outcomeRaw === 'null' ? null : outcomeRaw === 'true';
+  const oddsRaw = parseFloat(formData.get('odds') as string);
+  const odds = outcome !== null && !isNaN(oddsRaw) ? oddsRaw : null;
+  await sql`UPDATE events SET whales_won = ${outcome}, odds = ${odds} WHERE id = ${eventId}`;
   revalidatePath(`/${locale}/events/${eventId}`);
 }
 
@@ -176,35 +182,63 @@ export default async function EventPage({
           </div>
 
           {/* Settle */}
-          <div className="p-6 rounded-xl space-y-3" style={{background: 'var(--surface)', border: '1px solid var(--border)'}}>
+          <div className="p-6 rounded-xl space-y-4" style={{background: 'var(--surface)', border: '1px solid var(--border)'}}>
             <h3 className="text-xs font-semibold uppercase tracking-wider" style={{color: 'var(--subtle)'}}>
-              {t('admin')}
+              {t('admin')} {t('adminQuestion')}
             </h3>
-            <form action={toggleSettlement.bind(null, id, locale, true)}>
-              <button type="submit" className="w-full py-2.5 px-4 rounded-lg text-sm font-bold transition-all" style={{
-                background: data.event.whales_won === true ? 'var(--green)' : 'var(--surface2)',
-                color: data.event.whales_won === true ? '#111318' : 'var(--muted)',
-                border: `1px solid ${data.event.whales_won === true ? 'var(--green)' : 'var(--border)'}`,
-              }}>
-                {t('settleWhalesWon')}
-              </button>
-            </form>
-            <form action={toggleSettlement.bind(null, id, locale, false)}>
-              <button type="submit" className="w-full py-2.5 px-4 rounded-lg text-sm font-bold transition-all" style={{
-                background: data.event.whales_won === false ? 'var(--red)' : 'var(--surface2)',
-                color: data.event.whales_won === false ? '#111318' : 'var(--muted)',
-                border: `1px solid ${data.event.whales_won === false ? 'var(--red)' : 'var(--border)'}`,
-              }}>
-                {t('settleWhalesLost')}
-              </button>
-            </form>
-            {data.event.whales_won !== null && (
-              <form action={toggleSettlement.bind(null, id, locale, null)}>
-                <button type="submit" className="w-full py-2 px-4 rounded-lg text-xs transition-all" style={{color: 'var(--subtle)'}}>
+            <form action={toggleSettlement} className="space-y-3">
+              <input type="hidden" name="eventId" value={id} />
+              <input type="hidden" name="locale" value={locale} />
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  name="outcome"
+                  value="true"
+                  type="submit"
+                  className="py-2.5 px-4 rounded-lg text-sm font-bold transition-all"
+                  style={{
+                    background: data.event.whales_won === true ? 'var(--green)' : 'var(--surface2)',
+                    color: data.event.whales_won === true ? '#111318' : 'var(--muted)',
+                    border: `1px solid ${data.event.whales_won === true ? 'var(--green)' : 'var(--border)'}`,
+                  }}
+                >
+                  {t('yes')}
+                </button>
+                <button
+                  name="outcome"
+                  value="false"
+                  type="submit"
+                  className="py-2.5 px-4 rounded-lg text-sm font-bold transition-all"
+                  style={{
+                    background: data.event.whales_won === false ? 'var(--red)' : 'var(--surface2)',
+                    color: data.event.whales_won === false ? '#111318' : 'var(--muted)',
+                    border: `1px solid ${data.event.whales_won === false ? 'var(--red)' : 'var(--border)'}`,
+                  }}
+                >
+                  {t('no')}
+                </button>
+              </div>
+              <input
+                type="number"
+                name="odds"
+                step="0.01"
+                min="1"
+                placeholder={t('oddsPlaceholder')}
+                defaultValue={data.event.odds ?? ''}
+                className="w-full py-2 px-3 rounded-lg text-sm"
+                style={{background: 'var(--surface2)', color: 'var(--text)', border: '1px solid var(--border)'}}
+              />
+              {data.event.whales_won !== null && (
+                <button
+                  name="outcome"
+                  value="null"
+                  type="submit"
+                  className="w-full py-2 px-4 rounded-lg text-xs transition-all"
+                  style={{color: 'var(--subtle)'}}
+                >
                   {t('notSettled')}
                 </button>
-              </form>
-            )}
+              )}
+            </form>
           </div>
 
           {/* Market Insights */}
