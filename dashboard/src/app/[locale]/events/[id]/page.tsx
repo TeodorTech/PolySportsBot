@@ -59,7 +59,8 @@ async function toggleSettlement(formData: FormData) {
   const whaleOutcome = formData.get('whale_outcome') as string | null;
   const oddsRaw = parseFloat(formData.get('odds') as string);
 
-  if (resultOutcome === '__unsettled__') {
+  const isUnsettled = formData.get('unsettled') === '1';
+  if (isUnsettled) {
     await sql`UPDATE events SET whales_won = NULL, result_outcome = NULL, odds = NULL WHERE id = ${eventId}`;
   } else if (resultOutcome) {
     const whalesWon = resultOutcome === whaleOutcome;
@@ -241,8 +242,8 @@ export default async function EventPage({
               </button>
               {data.event.whales_won !== null && (
                 <button
-                  name="result_outcome"
-                  value="__unsettled__"
+                  name="unsettled"
+                  value="1"
                   type="submit"
                   className="w-full py-2 px-4 rounded-lg text-xs transition-all"
                   style={{color: 'var(--subtle)'}}
