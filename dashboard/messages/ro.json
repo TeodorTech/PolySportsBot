@@ -40,6 +40,9 @@
     "settleWhalesWon": "✓ Balene Câștigătoare",
     "settleWhalesLost": "✗ Balene Pierzătoare",
     "notSettled": "↺ Marchează ca Nefinalizat",
+    "prevPage": "Anterior",
+    "nextPage": "Următor",
+    "pageLabel": "Pagina",
     "oddsPlaceholder": "Cotă (ex. 1.75)"
   }
 }

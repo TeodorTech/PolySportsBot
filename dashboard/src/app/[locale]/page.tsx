@@ -41,26 +41,33 @@ async function getTrendingMarkets() {
   `;
 }
 
-async function getSettledMarkets() {
-  return await sql`
-    SELECT e.id, e.title, e.total_volume, e.whales_won,
+const PAGE_SIZE = 10;
+
+async function getSettledMarkets(page: number) {
+  const offset = (page - 1) * PAGE_SIZE;
+  const rows = await sql`
+    SELECT e.id, e.title, e.total_volume, e.whales_won, e.odds,
            COUNT(w.id) as whale_count
     FROM events e
     LEFT JOIN whale_activity w ON e.id = w.event_id
     WHERE e.whales_won IS NOT NULL
     GROUP BY e.id
     ORDER BY e.total_volume DESC
-    LIMIT 50
+    LIMIT ${PAGE_SIZE + 1} OFFSET ${offset}
   `;
+  const hasNext = rows.length > PAGE_SIZE;
+  return { rows: hasNext ? rows.slice(0, PAGE_SIZE) : rows, hasNext };
 }
 
-export default async function DashboardPage({ params }: { params: Promise<{ locale: string }> }) {
+export default async function DashboardPage({ params, searchParams }: { params: Promise<{ locale: string }>, searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
   const { locale } = await params;
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(1, parseInt((pageParam as string) || '1', 10));
   const t = await getTranslations('Dashboard');
-  const [stats, trending, settled] = await Promise.all([
+  const [stats, trending, { rows: settled, hasNext }] = await Promise.all([
     getStats(),
     getTrendingMarkets(),
-    getSettledMarkets(),
+    getSettledMarkets(page),
   ]);
 
   const maxVolume = trending.length > 0
@@ -228,6 +235,12 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
                       <span>{event.whale_count || 0} {t('whaleCount')}</span>
                       <span>·</span>
                       <span>${(Number(event.total_volume) / 1000000).toFixed(1)}M</span>
+                      {event.odds && (
+                        <>
+                          <span>·</span>
+                          <span className="font-bold font-mono" style={{color: 'var(--amber)'}}>@{Number(event.odds).toFixed(2)}</span>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -235,6 +248,27 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
                 </Link>
               );
             })}
+          </div>
+        )}
+        {(page > 1 || hasNext) && (
+          <div className="px-5 py-4 flex items-center justify-between" style={{borderTop: '1px solid var(--border)'}}>
+            <Link
+              href={`/${locale}?page=${page - 1}`}
+              className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${page <= 1 ? 'pointer-events-none opacity-30' : ''}`}
+              style={{background: 'var(--surface2)', color: 'var(--muted)', border: '1px solid var(--border)'}}
+            >
+              ← {t('prevPage')}
+            </Link>
+            <span className="text-xs" style={{color: 'var(--subtle)'}}>
+              {t('pageLabel')} {page}
+            </span>
+            <Link
+              href={`/${locale}?page=${page + 1}`}
+              className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${!hasNext ? 'pointer-events-none opacity-30' : ''}`}
+              style={{background: 'var(--surface2)', color: 'var(--muted)', border: '1px solid var(--border)'}}
+            >
+              {t('nextPage')} →
+            </Link>
           </div>
         )}
       </section>

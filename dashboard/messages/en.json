@@ -40,6 +40,9 @@
     "settleWhalesWon": "✓ Whales Won",
     "settleWhalesLost": "✗ Whales Lost",
     "notSettled": "↺ Mark as Unsettled",
+    "prevPage": "Previous",
+    "nextPage": "Next",
+    "pageLabel": "Page",
     "oddsPlaceholder": "Odds (e.g. 1.75)"
   }
 }
