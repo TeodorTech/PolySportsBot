@@ -40,10 +40,14 @@ async function getEventData(id: string) {
     value: value as number
   })).sort((a, b) => b.value - a.value);
 
+  // Outcome whales backed most (by volume)
+  const whaleOutcome = chartData[0]?.outcome ?? null;
+
   return {
     event: event[0],
     activity,
-    chartData
+    chartData,
+    whaleOutcome,
   };
 }
 
@@ -51,11 +55,18 @@ async function toggleSettlement(formData: FormData) {
   'use server';
   const eventId = formData.get('eventId') as string;
   const locale = formData.get('locale') as string;
-  const outcomeRaw = formData.get('outcome') as string;
-  const outcome = outcomeRaw === 'null' ? null : outcomeRaw === 'true';
+  const resultOutcome = formData.get('result_outcome') as string | null;
+  const whaleOutcome = formData.get('whale_outcome') as string | null;
   const oddsRaw = parseFloat(formData.get('odds') as string);
-  const odds = outcome !== null && !isNaN(oddsRaw) ? oddsRaw : null;
-  await sql`UPDATE events SET whales_won = ${outcome}, odds = ${odds} WHERE id = ${eventId}`;
+
+  if (resultOutcome === '__unsettled__') {
+    await sql`UPDATE events SET whales_won = NULL, result_outcome = NULL, odds = NULL WHERE id = ${eventId}`;
+  } else if (resultOutcome) {
+    const whalesWon = resultOutcome === whaleOutcome;
+    const odds = !isNaN(oddsRaw) ? oddsRaw : null;
+    await sql`UPDATE events SET whales_won = ${whalesWon}, result_outcome = ${resultOutcome}, odds = ${odds} WHERE id = ${eventId}`;
+  }
+
   revalidatePath(`/${locale}/events/${eventId}`);
 }
 
@@ -70,6 +81,11 @@ export default async function EventPage({
 
   const t = await getTranslations('Dashboard');
   const emoji = getSportEmoji(data.event.title, data.event.sport);
+
+  // Outcomes for settlement dropdown — prefer stored array, fall back to whale_activity outcomes
+  const outcomeOptions: string[] = data.event.outcomes?.length
+    ? data.event.outcomes
+    : data.chartData.map((d: { outcome: string }) => d.outcome);
 
   const totalWhaleVolume = data.activity.reduce((a: number, b: WhaleTrade) => a + Number(b.trade_value), 0);
   const avgTradeSize = data.activity.length > 0 ? totalWhaleVolume / data.activity.length : 0;
@@ -184,39 +200,28 @@ export default async function EventPage({
           {/* Settle */}
           <div className="p-6 rounded-xl space-y-4" style={{background: 'var(--surface)', border: '1px solid var(--border)'}}>
             <h3 className="text-xs font-semibold uppercase tracking-wider" style={{color: 'var(--subtle)'}}>
-              {t('admin')} {t('adminQuestion')}
+              {t('admin')}
             </h3>
+            {data.whaleOutcome && (
+              <p className="text-xs" style={{color: 'var(--muted)'}}>
+                {t('whaleBacked')}: <span className="font-bold" style={{color: 'var(--amber)'}}>{data.whaleOutcome}</span>
+              </p>
+            )}
             <form action={toggleSettlement} className="space-y-3">
               <input type="hidden" name="eventId" value={id} />
               <input type="hidden" name="locale" value={locale} />
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  name="outcome"
-                  value="true"
-                  type="submit"
-                  className="py-2.5 px-4 rounded-lg text-sm font-bold transition-all"
-                  style={{
-                    background: data.event.whales_won === true ? 'var(--green)' : 'var(--surface2)',
-                    color: data.event.whales_won === true ? '#111318' : 'var(--muted)',
-                    border: `1px solid ${data.event.whales_won === true ? 'var(--green)' : 'var(--border)'}`,
-                  }}
-                >
-                  {t('yes')}
-                </button>
-                <button
-                  name="outcome"
-                  value="false"
-                  type="submit"
-                  className="py-2.5 px-4 rounded-lg text-sm font-bold transition-all"
-                  style={{
-                    background: data.event.whales_won === false ? 'var(--red)' : 'var(--surface2)',
-                    color: data.event.whales_won === false ? '#111318' : 'var(--muted)',
-                    border: `1px solid ${data.event.whales_won === false ? 'var(--red)' : 'var(--border)'}`,
-                  }}
-                >
-                  {t('no')}
-                </button>
-              </div>
+              <input type="hidden" name="whale_outcome" value={data.whaleOutcome ?? ''} />
+              <select
+                name="result_outcome"
+                defaultValue={data.event.result_outcome ?? ''}
+                className="w-full py-2 px-3 rounded-lg text-sm"
+                style={{background: 'var(--surface2)', color: 'var(--text)', border: '1px solid var(--border)'}}
+              >
+                <option value="">{t('selectWinner')}</option>
+                {outcomeOptions.map((o: string) => (
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </select>
               <input
                 type="number"
                 name="odds"
@@ -227,10 +232,17 @@ export default async function EventPage({
                 className="w-full py-2 px-3 rounded-lg text-sm"
                 style={{background: 'var(--surface2)', color: 'var(--text)', border: '1px solid var(--border)'}}
               />
+              <button
+                type="submit"
+                className="w-full py-2.5 px-4 rounded-lg text-sm font-bold transition-all"
+                style={{background: 'var(--amber)', color: '#111318'}}
+              >
+                {t('settleSubmit')}
+              </button>
               {data.event.whales_won !== null && (
                 <button
-                  name="outcome"
-                  value="null"
+                  name="result_outcome"
+                  value="__unsettled__"
                   type="submit"
                   className="w-full py-2 px-4 rounded-lg text-xs transition-all"
                   style={{color: 'var(--subtle)'}}

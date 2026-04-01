@@ -43,7 +43,10 @@
     "prevPage": "Anterior",
     "nextPage": "Următor",
     "pageLabel": "Pagina",
-    "oddsPlaceholder": "Cotă (ex. 1.75)"
+    "oddsPlaceholder": "Cotă (ex. 1.75)",
+    "whaleBacked": "Balenele au pariat pe",
+    "selectWinner": "Selectează rezultatul câștigător…",
+    "settleSubmit": "Finalizează"
   },
   "Stats": {
     "title": "Statistici de Performanță",

@@ -36,10 +36,15 @@ class Database:
                             total_volume DECIMAL(18, 2),
                             sport TEXT,
                             odds DECIMAL(10, 2),
+                            outcomes TEXT[],
+                            result_outcome TEXT,
                             whales_won BOOLEAN DEFAULT NULL,
                             status TEXT,
                             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
                         );
+
+                        ALTER TABLE events ADD COLUMN IF NOT EXISTS outcomes TEXT[];
+                        ALTER TABLE events ADD COLUMN IF NOT EXISTS result_outcome TEXT;
 
                         CREATE TABLE IF NOT EXISTS whale_activity (
                             id SERIAL PRIMARY KEY,
@@ -60,7 +65,7 @@ class Database:
             conn.close()
 
     @staticmethod
-    def save_whale_activity(event_id: str, event_name: str, total_volume: float, outcome: str, side: str, price: float, value: float, ts: str, sport: str = 'Sports'):
+    def save_whale_activity(event_id: str, event_name: str, total_volume: float, outcome: str, side: str, price: float, value: float, ts: str, sport: str = 'Sports', outcomes: list = None):
         """Save a new whale activity to the database, processing the event upsert first."""
         conn = Database.get_connection()
         if not conn:
@@ -78,12 +83,13 @@ class Database:
 
                     # 2. UPSERT the event (using the real Event ID)
                     cur.execute('''
-                        INSERT INTO events (id, title, total_volume, sport, status)
-                        VALUES (%s, %s, %s, %s, %s)
+                        INSERT INTO events (id, title, total_volume, sport, outcomes, status)
+                        VALUES (%s, %s, %s, %s, %s, %s)
                         ON CONFLICT (id) DO UPDATE
                         SET title = EXCLUDED.title, total_volume = EXCLUDED.total_volume,
-                            sport = EXCLUDED.sport
-                    ''', (event_id, event_name, total_volume, sport, 'active'))
+                            sport = EXCLUDED.sport,
+                            outcomes = COALESCE(EXCLUDED.outcomes, events.outcomes)
+                    ''', (event_id, event_name, total_volume, sport, outcomes, 'active'))
 
                     # 2. INSERT the whale activity
                     cur.execute('''

@@ -113,12 +113,27 @@ class PolymarketWatcher:
                 event_id = self.token_to_event_id.get(token_id)
                 sport = self.token_to_sport.get(token_id, 'Sports')
                 total_volume = 0
+                all_outcomes = None
                 if event_id:
                     try:
                         event_data = GammaAPI.fetch_event_details(event_id)
                         total_volume = float(event_data.get("volume") or 0)
-                        # Optionally update our local cache
                         self.event_to_volume[event_name] = total_volume
+                        # Extract all unique outcome labels from the event's markets
+                        outcomes_set = set()
+                        for market in (event_data.get("markets") or []):
+                            outcomes_raw = market.get("outcomes")
+                            if isinstance(outcomes_raw, str):
+                                import json as _json
+                                try:
+                                    outcomes_raw = _json.loads(outcomes_raw)
+                                except Exception:
+                                    outcomes_raw = []
+                            for o in (outcomes_raw or []):
+                                if o and str(o).strip():
+                                    outcomes_set.add(str(o).strip())
+                        if outcomes_set:
+                            all_outcomes = sorted(outcomes_set)
                     except Exception as e:
                         print(f"  [VOL ERROR] Failed to fetch latest volume: {e}")
                         total_volume = self.event_to_volume.get(event_name, 0)
@@ -133,7 +148,8 @@ class PolymarketWatcher:
                     price=price,
                     value=value,
                     ts=ts_str,
-                    sport=sport
+                    sport=sport,
+                    outcomes=all_outcomes
                 )
 
         except (json.JSONDecodeError, TypeError):

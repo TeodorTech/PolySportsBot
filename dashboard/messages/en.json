@@ -43,7 +43,10 @@
     "prevPage": "Previous",
     "nextPage": "Next",
     "pageLabel": "Page",
-    "oddsPlaceholder": "Odds (e.g. 1.75)"
+    "oddsPlaceholder": "Odds (e.g. 1.75)",
+    "whaleBacked": "Whales backed",
+    "selectWinner": "Select winning outcome…",
+    "settleSubmit": "Settle"
   },
   "Stats": {
     "title": "Performance Statistics",
