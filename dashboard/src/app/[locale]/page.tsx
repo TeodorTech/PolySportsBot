@@ -3,13 +3,18 @@ import sql from '@/lib/db';
 import {ArrowRight} from 'lucide-react';
 import Link from 'next/link';
 import {getSportEmoji} from '@/lib/sportEmoji';
+import { Suspense } from 'react';
+import TimeRangeFilter from '@/components/TimeRangeFilter';
+import { parseRange, rangeToDate, DEFAULT_RANGE, TIME_RANGES, type TimeRange } from '@/lib/timeRange';
 
-async function getStats() {
+async function getStats(range: TimeRange) {
+  const since = rangeToDate(range);
   const settled = await sql`
     SELECT COUNT(*) as total,
            COUNT(*) FILTER (WHERE whales_won = true) as wins
     FROM events
     WHERE whales_won IS NOT NULL
+    ${since ? sql`AND created_at >= ${since}` : sql``}
   `;
 
   const totalVolume = await sql`
@@ -51,7 +56,8 @@ async function getTrendingMarkets() {
 
 const PAGE_SIZE = 10;
 
-async function getSettledMarkets(page: number) {
+async function getSettledMarkets(page: number, range: TimeRange) {
+  const since = rangeToDate(range);
   const offset = (page - 1) * PAGE_SIZE;
   const rows = await sql`
     SELECT e.id, e.title, e.sport, e.total_volume, e.whales_won, e.odds,
@@ -59,6 +65,7 @@ async function getSettledMarkets(page: number) {
     FROM events e
     LEFT JOIN whale_activity w ON e.id = w.event_id
     WHERE e.whales_won IS NOT NULL
+    ${since ? sql`AND e.created_at >= ${since}` : sql``}
     GROUP BY e.id
     ORDER BY e.created_at DESC
     LIMIT ${PAGE_SIZE + 1} OFFSET ${offset}
@@ -67,17 +74,27 @@ async function getSettledMarkets(page: number) {
   return { rows: hasNext ? rows.slice(0, PAGE_SIZE) : rows, hasNext };
 }
 
+function buildPageHref(locale: string, page: number, range: TimeRange) {
+  const params = new URLSearchParams();
+  if (range !== DEFAULT_RANGE) params.set('range', range);
+  if (page > 1) params.set('page', String(page));
+  const qs = params.toString();
+  return `/${locale}${qs ? '?' + qs : ''}`;
+}
+
 export default async function DashboardPage({ params, searchParams }: { params: Promise<{ locale: string }>, searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
   const { locale } = await params;
-  const { page: pageParam } = await searchParams;
+  const { page: pageParam, range: rangeParam } = await searchParams;
   const page = Math.max(1, parseInt((pageParam as string) || '1', 10));
+  const range = parseRange(rangeParam);
   const t = await getTranslations('Dashboard');
   const [stats, trending, { rows: settled, hasNext }] = await Promise.all([
-    getStats(),
+    getStats(range),
     getTrendingMarkets(),
-    getSettledMarkets(page),
+    getSettledMarkets(page, range),
   ]);
 
+  const labelMap = Object.fromEntries(TIME_RANGES.map(({ labelKey }) => [labelKey, t(labelKey as Parameters<typeof t>[0])]));
 
   return (
     <div className="space-y-10 md:space-y-14">
@@ -108,6 +125,11 @@ export default async function DashboardPage({ params, searchParams }: { params: 
           </p>
         </div>
       </header>
+
+      {/* Time Range Filter */}
+      <Suspense fallback={<div className="h-8" />}>
+        <TimeRangeFilter current={range} labelMap={labelMap} />
+      </Suspense>
 
       {/* Stats Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -262,7 +284,7 @@ export default async function DashboardPage({ params, searchParams }: { params: 
         {(page > 1 || hasNext) && (
           <div className="px-5 py-4 flex items-center justify-between" style={{borderTop: '1px solid var(--border)'}}>
             <Link
-              href={`/${locale}?page=${page - 1}`}
+              href={buildPageHref(locale, page - 1, range)}
               className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${page <= 1 ? 'pointer-events-none opacity-30' : ''}`}
               style={{background: 'var(--surface2)', color: 'var(--muted)', border: '1px solid var(--border)'}}
             >
@@ -272,7 +294,7 @@ export default async function DashboardPage({ params, searchParams }: { params: 
               {t('pageLabel')} {page}
             </span>
             <Link
-              href={`/${locale}?page=${page + 1}`}
+              href={buildPageHref(locale, page + 1, range)}
               className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${!hasNext ? 'pointer-events-none opacity-30' : ''}`}
               style={{background: 'var(--surface2)', color: 'var(--muted)', border: '1px solid var(--border)'}}
             >

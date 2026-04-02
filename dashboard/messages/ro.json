@@ -46,7 +46,13 @@
     "oddsPlaceholder": "Cotă (ex. 1.75)",
     "whaleBacked": "Balenele au pariat pe",
     "selectWinner": "Selectează rezultatul câștigător…",
-    "settleSubmit": "Finalizează"
+    "settleSubmit": "Finalizează",
+    "range7d": "7Z",
+    "range15d": "15Z",
+    "range1m": "1L",
+    "range3m": "3L",
+    "range1y": "1A",
+    "rangeAll": "Tot"
   },
   "Stats": {
     "title": "Statistici de Performanță",

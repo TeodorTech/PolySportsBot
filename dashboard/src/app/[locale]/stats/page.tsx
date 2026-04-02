@@ -4,6 +4,10 @@ import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { getSportEmoji } from '@/lib/sportEmoji';
 import { calcOverallRoi, calcConvictionRoi, OVERALL_BANKROLL, OVERALL_STAKE, CONVICTION_BANKROLL, CONVICTION_STAKE } from '@/lib/roi';
+import { Suspense } from 'react';
+import TimeRangeFilter from '@/components/TimeRangeFilter';
+import { parseRange, rangeToDate, TIME_RANGES, type TimeRange } from '@/lib/timeRange';
+import BankrollChart from '@/components/BankrollChart';
 
 interface SettledEvent {
   id: string;
@@ -37,7 +41,10 @@ interface ConsensusBucket {
   winRate: number | null;
 }
 
-async function getStatsData() {
+async function getStatsData(range: TimeRange) {
+  const since = rangeToDate(range);
+  const dateFilter = since ? sql`AND e.created_at >= ${since}` : sql``;
+
   // Main settled events query — also computes top outcome volume per event for consensus
   const events = await sql`
     SELECT
@@ -68,6 +75,7 @@ async function getStatsData() {
     FROM events e
     LEFT JOIN whale_activity w ON e.id = w.event_id
     WHERE e.whales_won IS NOT NULL
+    ${dateFilter}
     GROUP BY e.id
     ORDER BY e.id DESC
   ` as unknown as SettledEvent[];
@@ -151,6 +159,7 @@ async function getStatsData() {
       ) as big_trade_count
     FROM events e
     WHERE e.whales_won IS NOT NULL
+    ${dateFilter}
     ORDER BY e.id DESC
   `;
 
@@ -199,6 +208,52 @@ async function getStatsData() {
     if (b.total > 0) b.winRate = (b.wins / b.total) * 100;
   }
 
+  // --- Bankroll evolution chart ---
+  // Walk events chronologically (oldest first) and simulate a $1000 bankroll
+  const chronoEvents = [...events].reverse(); // events is DESC by id, reverse = ASC
+  const bankrollPoints: import('@/components/BankrollChart').BankrollPoint[] = [];
+  let overallBalance = OVERALL_BANKROLL;
+  let convictionBalance = CONVICTION_BANKROLL;
+  let hasAnyConvictionOdds = false;
+
+  // Track conviction balance separately — only changes on events with big trades
+  const convictionEventIds = new Set(convictionEvents.map(e => e.id));
+
+  for (let i = 0; i < chronoEvents.length; i++) {
+    const e = chronoEvents[i];
+    const hasOdds = e.odds !== null && Number(e.odds) > 0;
+    const label = `#${i + 1}`;
+
+    // Overall: $100 stake per event, only when odds are available
+    if (hasOdds) {
+      overallBalance -= OVERALL_STAKE;
+      if (e.whales_won === true) overallBalance += OVERALL_STAKE * Number(e.odds);
+    }
+
+    // Conviction: $250 stake, only on conviction events with odds
+    const isConvictionWithOdds = convictionEventIds.has(e.id) && hasOdds;
+    const convictionBalanceBeforeUpdate = convictionBalance;
+    const wasFirstConviction = !hasAnyConvictionOdds && isConvictionWithOdds;
+    if (isConvictionWithOdds) {
+      hasAnyConvictionOdds = true;
+      const convRow = convictionEvents.find(r => r.id === e.id)!;
+      const convWon = !!(convRow.result_outcome && convRow.big_trade_outcome && convRow.result_outcome === convRow.big_trade_outcome);
+      convictionBalance -= CONVICTION_STAKE;
+      if (convWon) convictionBalance += CONVICTION_STAKE * Number(e.odds);
+    }
+
+    bankrollPoints.push({
+      label,
+      overall: hasOdds ? Math.round(overallBalance) : null,
+      // On the very first conviction event, show the pre-trade balance (CONVICTION_BANKROLL)
+      // so the line visually starts at $1000 rather than the post-trade result.
+      // After that, carry forward the running balance so the line stays connected.
+      conviction: wasFirstConviction
+        ? CONVICTION_BANKROLL
+        : hasAnyConvictionOdds ? Math.round(convictionBalance) : null,
+    });
+  }
+
   return {
     totalEvents, actualWins, losses,
     rawWinRate, expectedWinRate, edge,
@@ -206,14 +261,18 @@ async function getStatsData() {
     sportStats, buckets, events,
     convictionTotal, convictionWins, convictionWinRate, totalBigTrades,
     convictionRoi, convictionPnl, convictionRoiCount: convictionWithOdds.length, convictionEvents,
+    bankrollPoints,
   };
 }
 
-export default async function StatsPage({ params }: { params: Promise<{ locale: string }> }) {
+export default async function StatsPage({ params, searchParams }: { params: Promise<{ locale: string }>, searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
   const { locale } = await params;
+  const { range: rangeParam } = await searchParams;
+  const range = parseRange(rangeParam);
   const t = await getTranslations('Dashboard');
   const ts = await getTranslations('Stats');
-  const data = await getStatsData();
+  const data = await getStatsData(range);
+  const labelMap = Object.fromEntries(TIME_RANGES.map(({ labelKey }) => [labelKey, t(labelKey as Parameters<typeof t>[0])]));
 
   return (
     <div className="space-y-10 md:space-y-14">
@@ -229,13 +288,18 @@ export default async function StatsPage({ params }: { params: Promise<{ locale: 
             {t('backToMarkets')}
           </Link>
         </nav>
-        <div className="space-y-2">
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight" style={{ color: 'var(--text)' }}>
-            {ts('title')}
-          </h1>
-          <p className="text-base" style={{ color: 'var(--muted)' }}>
-            {ts('subtitle')}
-          </p>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="space-y-2">
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight" style={{ color: 'var(--text)' }}>
+              {ts('title')}
+            </h1>
+            <p className="text-base" style={{ color: 'var(--muted)' }}>
+              {ts('subtitle')}
+            </p>
+          </div>
+          <Suspense fallback={<div className="h-8" />}>
+            <TimeRangeFilter current={range} labelMap={labelMap} />
+          </Suspense>
         </div>
       </header>
 
@@ -573,6 +637,23 @@ export default async function StatsPage({ params }: { params: Promise<{ locale: 
               })}
             </div>
           </section>
+
+          {/* Bankroll Evolution */}
+          {data.bankrollPoints.some(p => p.overall !== null) && (
+            <section className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+              <div className="px-5 py-4" style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
+                <h2 className="text-base font-bold tracking-tight" style={{ color: 'var(--text)' }}>
+                  $1,000 Account Evolution
+                </h2>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--subtle)' }}>
+                  Simulated bankroll starting at $1,000 — <span style={{ color: 'var(--amber)' }}>$100/event (overall)</span> · <span style={{ color: 'var(--green)' }}>$250/event (conviction)</span>
+                </p>
+              </div>
+              <div className="p-4" style={{ background: 'var(--surface)' }}>
+                <BankrollChart data={data.bankrollPoints} bankroll={OVERALL_BANKROLL} />
+              </div>
+            </section>
+          )}
 
           {/* Glossary */}
           <div className="p-5 rounded-xl text-xs space-y-2" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--subtle)' }}>

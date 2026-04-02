@@ -46,7 +46,13 @@
     "oddsPlaceholder": "Odds (e.g. 1.75)",
     "whaleBacked": "Whales backed",
     "selectWinner": "Select winning outcome…",
-    "settleSubmit": "Settle"
+    "settleSubmit": "Settle",
+    "range7d": "7D",
+    "range15d": "15D",
+    "range1m": "1M",
+    "range3m": "3M",
+    "range1y": "1Y",
+    "rangeAll": "All"
   },
   "Stats": {
     "title": "Performance Statistics",
