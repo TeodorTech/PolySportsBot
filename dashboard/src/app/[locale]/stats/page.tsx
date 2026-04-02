@@ -3,6 +3,7 @@ import sql from '@/lib/db';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { getSportEmoji } from '@/lib/sportEmoji';
+import { calcOverallRoi, calcConvictionRoi, OVERALL_BANKROLL, OVERALL_STAKE, CONVICTION_BANKROLL, CONVICTION_STAKE } from '@/lib/roi';
 
 interface SettledEvent {
   id: string;
@@ -92,22 +93,13 @@ async function getStatsData() {
   const adjustedWinRate = (adjustedWinScore / totalEvents) * 100;
 
   // Overall ROI: flat $100 per event (10% of $1000 bankroll)
-  const OVERALL_BANKROLL = 1000;
-  const OVERALL_STAKE = 100;
   const eventsWithOdds = events.filter(e => e.odds !== null && Number(e.odds) > 0);
-  let roi: number | null = null;
-  let roiEventCount = 0;
-  let roiPnl: number | null = null;
-  if (eventsWithOdds.length > 0) {
-    const totalStaked = eventsWithOdds.length * OVERALL_STAKE;
-    const totalReturned = eventsWithOdds.reduce((sum, e) => {
-      if (e.whales_won === true) return sum + OVERALL_STAKE * Number(e.odds);
-      return sum;
-    }, 0);
-    roiPnl = totalReturned - totalStaked;
-    roi = (roiPnl / OVERALL_BANKROLL) * 100;
-    roiEventCount = eventsWithOdds.length;
-  }
+  const overallRoiResult = calcOverallRoi(
+    eventsWithOdds.map(e => ({ won: e.whales_won === true, odds: Number(e.odds) }))
+  );
+  const roi = overallRoiResult?.roi ?? null;
+  const roiPnl = overallRoiResult?.pnl ?? null;
+  const roiEventCount = overallRoiResult?.eventCount ?? 0;
 
   // --- Sport breakdown ---
   const sportMap = new Map<string, { total: number; wins: number; expectedWins: number }>();
@@ -171,20 +163,15 @@ async function getStatsData() {
   const totalBigTrades = convictionRows.reduce((sum, r) => sum + Number(r.big_trade_count), 0);
 
   // Conviction ROI: flat $250 per event (25% of $1000 bankroll)
-  const CONVICTION_BANKROLL = 1000;
-  const CONVICTION_STAKE = 250;
   const convictionWithOdds = convictionEvents.filter(r => r.odds !== null && Number(r.odds) > 0);
-  let convictionRoi: number | null = null;
-  let convictionPnl: number | null = null;
-  if (convictionWithOdds.length > 0) {
-    const totalStaked = convictionWithOdds.length * CONVICTION_STAKE;
-    const totalReturned = convictionWithOdds.reduce((sum, r) => {
-      const won = r.result_outcome && r.big_trade_outcome && r.result_outcome === r.big_trade_outcome;
-      return won ? sum + CONVICTION_STAKE * Number(r.odds) : sum;
-    }, 0);
-    convictionPnl = totalReturned - totalStaked;
-    convictionRoi = (convictionPnl / CONVICTION_BANKROLL) * 100;
-  }
+  const convictionRoiResult = calcConvictionRoi(
+    convictionWithOdds.map(r => ({
+      won: !!(r.result_outcome && r.big_trade_outcome && r.result_outcome === r.big_trade_outcome),
+      odds: Number(r.odds),
+    }))
+  );
+  const convictionRoi = convictionRoiResult?.roi ?? null;
+  const convictionPnl = convictionRoiResult?.pnl ?? null;
 
   // --- Consensus breakdown ---
   // Consensus = top_outcome_volume / whale_volume for each event
