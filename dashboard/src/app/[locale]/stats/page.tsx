@@ -91,16 +91,21 @@ async function getStatsData() {
   }, 0);
   const adjustedWinRate = (adjustedWinScore / totalEvents) * 100;
 
+  // Overall ROI: flat $100 per event (10% of $1000 bankroll)
+  const OVERALL_BANKROLL = 1000;
+  const OVERALL_STAKE = 100;
   const eventsWithOdds = events.filter(e => e.odds !== null && Number(e.odds) > 0);
   let roi: number | null = null;
   let roiEventCount = 0;
+  let roiPnl: number | null = null;
   if (eventsWithOdds.length > 0) {
-    const totalStaked = eventsWithOdds.reduce((sum, e) => sum + Number(e.whale_volume || 0), 0);
+    const totalStaked = eventsWithOdds.length * OVERALL_STAKE;
     const totalReturned = eventsWithOdds.reduce((sum, e) => {
-      if (e.whales_won === true) return sum + Number(e.whale_volume || 0) * Number(e.odds);
+      if (e.whales_won === true) return sum + OVERALL_STAKE * Number(e.odds);
       return sum;
     }, 0);
-    roi = totalStaked > 0 ? ((totalReturned - totalStaked) / totalStaked) * 100 : 0;
+    roiPnl = totalReturned - totalStaked;
+    roi = (roiPnl / OVERALL_BANKROLL) * 100;
     roiEventCount = eventsWithOdds.length;
   }
 
@@ -124,6 +129,62 @@ async function getStatsData() {
       edge: ((s.wins / s.total) * 100) - ((s.expectedWins / s.total) * 100),
     }))
     .sort((a, b) => b.total - a.total);
+
+  // --- Conviction trades (>= $50k) breakdown ---
+  const convictionRows = await sql`
+    SELECT
+      e.id,
+      e.title,
+      e.sport,
+      e.odds,
+      e.result_outcome,
+      e.whales_won,
+      (
+        SELECT w2.outcome
+        FROM whale_activity w2
+        WHERE w2.event_id = e.id AND w2.trade_value >= 50000
+        GROUP BY w2.outcome
+        ORDER BY SUM(w2.trade_value) DESC
+        LIMIT 1
+      ) as big_trade_outcome,
+      (
+        SELECT SUM(w2.trade_value)
+        FROM whale_activity w2
+        WHERE w2.event_id = e.id AND w2.trade_value >= 50000
+      ) as big_trade_volume,
+      (
+        SELECT COUNT(*)
+        FROM whale_activity w2
+        WHERE w2.event_id = e.id AND w2.trade_value >= 50000
+      ) as big_trade_count
+    FROM events e
+    WHERE e.whales_won IS NOT NULL
+    ORDER BY e.id DESC
+  `;
+
+  const convictionEvents = convictionRows.filter(r => Number(r.big_trade_count) > 0);
+  const convictionTotal = convictionEvents.length;
+  const convictionWins = convictionEvents.filter(r =>
+    r.result_outcome && r.big_trade_outcome && r.result_outcome === r.big_trade_outcome
+  ).length;
+  const convictionWinRate = convictionTotal > 0 ? (convictionWins / convictionTotal) * 100 : null;
+  const totalBigTrades = convictionRows.reduce((sum, r) => sum + Number(r.big_trade_count), 0);
+
+  // Conviction ROI: flat $250 per event (25% of $1000 bankroll)
+  const CONVICTION_BANKROLL = 1000;
+  const CONVICTION_STAKE = 250;
+  const convictionWithOdds = convictionEvents.filter(r => r.odds !== null && Number(r.odds) > 0);
+  let convictionRoi: number | null = null;
+  let convictionPnl: number | null = null;
+  if (convictionWithOdds.length > 0) {
+    const totalStaked = convictionWithOdds.length * CONVICTION_STAKE;
+    const totalReturned = convictionWithOdds.reduce((sum, r) => {
+      const won = r.result_outcome && r.big_trade_outcome && r.result_outcome === r.big_trade_outcome;
+      return won ? sum + CONVICTION_STAKE * Number(r.odds) : sum;
+    }, 0);
+    convictionPnl = totalReturned - totalStaked;
+    convictionRoi = (convictionPnl / CONVICTION_BANKROLL) * 100;
+  }
 
   // --- Consensus breakdown ---
   // Consensus = top_outcome_volume / whale_volume for each event
@@ -154,8 +215,10 @@ async function getStatsData() {
   return {
     totalEvents, actualWins, losses,
     rawWinRate, expectedWinRate, edge,
-    adjustedWinRate, roi, roiEventCount,
+    adjustedWinRate, roi, roiPnl, roiEventCount,
     sportStats, buckets, events,
+    convictionTotal, convictionWins, convictionWinRate, totalBigTrades,
+    convictionRoi, convictionPnl, convictionRoiCount: convictionWithOdds.length, convictionEvents,
   };
 }
 
@@ -224,7 +287,10 @@ export default async function StatsPage({ params }: { params: Promise<{ locale: 
                   <p className="text-3xl font-bold font-mono tracking-tight" style={{ color: data.roi >= 0 ? 'var(--green)' : 'var(--red)' }}>
                     {data.roi >= 0 ? '+' : ''}{data.roi.toFixed(1)}%
                   </p>
-                  <p className="text-xs mt-1" style={{ color: 'var(--subtle)' }}>{ts('roiFrom')} {data.roiEventCount} {ts('events')}</p>
+                  <p className="text-xs mt-1 font-mono font-semibold" style={{ color: data.roiPnl! >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                    {data.roiPnl! >= 0 ? '+' : ''}${data.roiPnl!.toFixed(0)} · $100/event
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--subtle)' }}>{ts('roiFrom')} {data.roiEventCount} {ts('events')}</p>
                 </>
               ) : (
                 <>
@@ -351,6 +417,107 @@ export default async function StatsPage({ params }: { params: Promise<{ locale: 
               </div>
             </section>
           </div>
+
+          {/* Conviction Trades */}
+          <section className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+            <div className="px-5 py-4" style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
+              <h2 className="text-base font-bold tracking-tight" style={{ color: 'var(--text)' }}>{ts('convictionTitle')}</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--subtle)' }}>{ts('convictionDesc')}</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x" style={{ borderColor: 'var(--border)' }}>
+              <div className="px-5 py-5" style={{ background: 'var(--surface)' }}>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--subtle)' }}>{ts('convictionWinRate')}</p>
+                {data.convictionWinRate !== null ? (
+                  <>
+                    <p className="text-3xl font-bold font-mono tracking-tight" style={{ color: data.convictionWinRate >= data.rawWinRate ? 'var(--green)' : 'var(--amber)' }}>
+                      {data.convictionWinRate.toFixed(1)}%
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--subtle)' }}>
+                      {data.convictionWins}W — {data.convictionTotal - data.convictionWins}L / {data.convictionTotal} {ts('events')}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-3xl font-bold font-mono tracking-tight" style={{ color: 'var(--subtle)' }}>N/A</p>
+                )}
+              </div>
+
+              <div className="px-5 py-5" style={{ background: 'var(--surface)' }}>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--subtle)' }}>{ts('convictionVsOverall')}</p>
+                {data.convictionWinRate !== null ? (
+                  <>
+                    <p className="text-3xl font-bold font-mono tracking-tight" style={{ color: data.convictionWinRate - data.rawWinRate >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {data.convictionWinRate - data.rawWinRate >= 0 ? '+' : ''}{(data.convictionWinRate - data.rawWinRate).toFixed(1)}pp
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--subtle)' }}>{ts('convictionVsOverallDesc')}</p>
+                  </>
+                ) : (
+                  <p className="text-3xl font-bold font-mono tracking-tight" style={{ color: 'var(--subtle)' }}>N/A</p>
+                )}
+              </div>
+
+              <div className="px-5 py-5" style={{ background: 'var(--surface)' }}>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--subtle)' }}>{ts('roi')}</p>
+                {data.convictionRoi !== null ? (
+                  <>
+                    <p className="text-3xl font-bold font-mono tracking-tight" style={{ color: data.convictionRoi >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {data.convictionRoi >= 0 ? '+' : ''}{data.convictionRoi.toFixed(1)}%
+                    </p>
+                    <p className="text-xs mt-1 font-mono font-semibold" style={{ color: data.convictionPnl! >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {data.convictionPnl! >= 0 ? '+' : ''}${data.convictionPnl!.toFixed(0)} · $250/event
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--subtle)' }}>{ts('roiFrom')} {data.convictionRoiCount} {ts('events')}</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-3xl font-bold font-mono tracking-tight" style={{ color: 'var(--subtle)' }}>N/A</p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--subtle)' }}>{ts('roiNone')}</p>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {data.convictionEvents.length > 0 && (
+              <div className="divide-y" style={{ borderColor: 'var(--border)', borderTop: '1px solid var(--border)' }}>
+                {data.convictionEvents.map((event) => {
+                  const emoji = getSportEmoji(event.title, event.sport);
+                  const won = event.result_outcome && event.big_trade_outcome && event.result_outcome === event.big_trade_outcome;
+                  return (
+                    <Link
+                      key={event.id}
+                      href={`/${locale}/events/${event.id}`}
+                      className="group px-5 py-4 flex items-center gap-4 transition-all"
+                      style={{ background: 'var(--surface)' }}
+                    >
+                      <span className="text-xl shrink-0 w-8 text-center">{emoji}</span>
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className="text-sm font-semibold line-clamp-1" style={{ color: won ? 'var(--text)' : 'var(--muted)' }}>
+                            {event.title}
+                          </h3>
+                          <span className="px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wide shrink-0" style={{
+                            background: won ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                            color: won ? 'var(--green)' : 'var(--red)',
+                            border: `1px solid ${won ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
+                          }}>
+                            {won ? t('statusWin') : t('statusLoss')}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs flex-wrap" style={{ color: 'var(--subtle)' }}>
+                          <span>{ts('convictionBacked')}: <span className="font-semibold" style={{ color: 'var(--amber)' }}>{event.big_trade_outcome}</span></span>
+                          <span>·</span>
+                          <span>{ts('convictionResult')}: <span className="font-semibold" style={{ color: 'var(--muted)' }}>{event.result_outcome || '—'}</span></span>
+                          <span>·</span>
+                          <span className="font-mono">${(Number(event.big_trade_volume) / 1000).toFixed(0)}K</span>
+                          <span>·</span>
+                          <span>{event.big_trade_count} {ts('convictionTradesSuffix')}</span>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </section>
 
           {/* Per-event breakdown */}
           <section className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>

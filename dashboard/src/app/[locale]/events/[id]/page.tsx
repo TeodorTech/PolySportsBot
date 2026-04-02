@@ -1,6 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 import sql from '@/lib/db';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import WhaleChart from '@/components/WhaleChart';
@@ -49,6 +49,15 @@ async function getEventData(id: string) {
     chartData,
     whaleOutcome,
   };
+}
+
+async function deleteEvent(formData: FormData) {
+  'use server';
+  const eventId = formData.get('eventId') as string;
+  const locale = formData.get('locale') as string;
+  await sql`DELETE FROM whale_activity WHERE event_id = ${eventId}`;
+  await sql`DELETE FROM events WHERE id = ${eventId}`;
+  redirect(`/${locale}`);
 }
 
 async function toggleSettlement(formData: FormData) {
@@ -251,6 +260,24 @@ export default async function EventPage({
                   {t('notSettled')}
                 </button>
               )}
+            </form>
+          </div>
+
+          {/* Delete */}
+          <div className="p-6 rounded-xl" style={{background: 'var(--surface)', border: '1px solid var(--border)'}}>
+            <h3 className="text-xs font-semibold uppercase tracking-wider mb-4" style={{color: 'var(--subtle)'}}>
+              Danger Zone
+            </h3>
+            <form action={deleteEvent}>
+              <input type="hidden" name="eventId" value={id} />
+              <input type="hidden" name="locale" value={locale} />
+              <button
+                type="submit"
+                className="w-full py-2.5 px-4 rounded-lg text-sm font-bold transition-all"
+                style={{background: 'rgba(239, 68, 68, 0.1)', color: 'var(--red)', border: '1px solid rgba(239, 68, 68, 0.2)'}}
+              >
+                Delete Event
+              </button>
             </form>
           </div>
 

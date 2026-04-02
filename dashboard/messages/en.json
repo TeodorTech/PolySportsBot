@@ -85,6 +85,16 @@
     "consensusGlossary": "Consensus = % of total whale volume on the single most-backed outcome.",
     "winRate": "win rate",
     "consensus": "Consensus",
-    "glossaryConsensus": "% of total whale volume concentrated on the top outcome. High consensus = whales agreed strongly on one side."
+    "glossaryConsensus": "% of total whale volume concentrated on the top outcome. High consensus = whales agreed strongly on one side.",
+    "convictionTitle": "Conviction Trades",
+    "convictionDesc": "Events where at least one trade ≥ $50k was placed. Win rate based on which outcome big money backed.",
+    "convictionWinRate": "Conviction Win Rate",
+    "convictionVsOverall": "vs. Overall",
+    "convictionVsOverallDesc": "Difference vs. all-whale win rate",
+    "convictionTradeCount": "Big Trades",
+    "convictionTradeCountDesc": "Total trades ≥ $50k across all events",
+    "convictionBacked": "Backed",
+    "convictionResult": "Result",
+    "convictionTradesSuffix": "big trades"
   }
 }

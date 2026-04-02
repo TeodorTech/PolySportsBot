@@ -60,7 +60,7 @@ async function getSettledMarkets(page: number) {
     LEFT JOIN whale_activity w ON e.id = w.event_id
     WHERE e.whales_won IS NOT NULL
     GROUP BY e.id
-    ORDER BY e.total_volume DESC
+    ORDER BY e.created_at DESC
     LIMIT ${PAGE_SIZE + 1} OFFSET ${offset}
   `;
   const hasNext = rows.length > PAGE_SIZE;

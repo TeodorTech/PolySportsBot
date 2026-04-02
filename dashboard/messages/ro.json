@@ -85,6 +85,16 @@
     "consensusGlossary": "Consens = % din volumul total al balenelor pe cel mai susținut rezultat.",
     "winRate": "rată câștig",
     "consensus": "Consens",
-    "glossaryConsensus": "% din volumul total al balenelor concentrat pe rezultatul principal. Consens ridicat = balenele au fost de acord puternic pe o parte."
+    "glossaryConsensus": "% din volumul total al balenelor concentrat pe rezultatul principal. Consens ridicat = balenele au fost de acord puternic pe o parte.",
+    "convictionTitle": "Tranzacții de Convingere",
+    "convictionDesc": "Evenimente cu cel puțin o tranzacție ≥ $50k. Rata de câștig bazată pe rezultatul susținut de banii mari.",
+    "convictionWinRate": "Rată Câștig Convingere",
+    "convictionVsOverall": "vs. General",
+    "convictionVsOverallDesc": "Diferență față de rata generală",
+    "convictionTradeCount": "Tranzacții Mari",
+    "convictionTradeCountDesc": "Total tranzacții ≥ $50k pe toate evenimentele",
+    "convictionBacked": "Pariat pe",
+    "convictionResult": "Rezultat",
+    "convictionTradesSuffix": "tranzacții mari"
   }
 }
