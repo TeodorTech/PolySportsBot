@@ -6,6 +6,7 @@ import Link from 'next/link';
 import WhaleChart from '@/components/WhaleChart';
 import { getSportEmoji } from '@/lib/sportEmoji';
 import { revalidatePath } from 'next/cache';
+import { calcConsensus, consensusColor } from '@/lib/thresholds';
 
 interface WhaleTrade {
   id: number;
@@ -40,14 +41,32 @@ async function getEventData(id: string) {
     value: value as number
   })).sort((a, b) => b.value - a.value);
 
-  // Outcome whales backed most (by volume)
-  const whaleOutcome = chartData[0]?.outcome ?? null;
+  // Whale sentiment and consensus based on conviction trades (>= $50k) only
+  const CONVICTION_THRESHOLD = 50000;
+  const convictionTrades = activity.filter(t => Number(t.trade_value) >= CONVICTION_THRESHOLD);
+
+  const convictionVolumePerOutcome = convictionTrades.reduce((acc: Record<string, number>, curr) => {
+    acc[curr.outcome] = (acc[curr.outcome] || 0) + Number(curr.trade_value);
+    return acc;
+  }, {});
+
+  const convictionChartData = Object.entries(convictionVolumePerOutcome).map(([outcome, value]) => ({
+    outcome,
+    value: value as number
+  })).sort((a, b) => b.value - a.value);
+
+  // Outcome whales backed most (by conviction volume)
+  const whaleOutcome = convictionChartData[0]?.outcome ?? chartData[0]?.outcome ?? null;
+
+  const totalAllVolume = chartData.reduce((s, d) => s + d.value, 0);
+  const consensusPct = calcConsensus(chartData[0]?.value ?? 0, totalAllVolume);
 
   return {
     event: event[0],
     activity,
     chartData,
     whaleOutcome,
+    consensusPct,
   };
 }
 
@@ -170,7 +189,9 @@ export default async function EventPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {data.activity.map((trade) => (
+                  {data.activity.map((trade) => {
+                    const isConviction = Number(trade.trade_value) >= 50000;
+                    return (
                     <tr key={trade.id} className="group" style={{borderBottom: '1px solid var(--border)'}}>
                       <td className="py-3 text-sm font-semibold max-w-[140px] truncate" style={{color: 'var(--text)'}}>
                         {trade.outcome}
@@ -181,14 +202,14 @@ export default async function EventPage({
                       <td className="py-3 text-sm font-mono" style={{color: 'var(--muted)'}}>
                         {(Number(trade.price) * 100).toFixed(1)}¢
                       </td>
-                      <td className="py-3 text-sm font-bold whitespace-nowrap" style={{color: 'var(--text)'}}>
+                      <td className="py-3 text-sm font-bold whitespace-nowrap" style={{color: isConviction ? 'var(--amber)' : 'var(--text)'}}>
                         ${Number(trade.trade_value).toLocaleString()}
                       </td>
                       <td className="py-3 text-sm hidden sm:table-cell whitespace-nowrap" style={{color: 'var(--subtle)'}}>
                         {new Date(trade.timestamp_utc).toLocaleTimeString()}
                       </td>
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
               </table>
             </div>
@@ -203,8 +224,21 @@ export default async function EventPage({
               {t('whaleSentiment')}
             </h3>
             <p className="text-sm leading-relaxed" style={{color: 'var(--muted)'}}>
-              {t('sentimentDescription')} <span className="font-bold" style={{color: 'var(--text)'}}>{data.chartData[0]?.outcome || 'N/A'}</span>.
+              {t('sentimentDescription')} <span className="font-bold" style={{color: 'var(--text)'}}>{data.whaleOutcome || 'N/A'}</span>.
             </p>
+            {data.consensusPct !== null && (
+              <div className="mt-3 pt-3" style={{borderTop: '1px solid var(--border)'}}>
+                <div className="flex justify-between items-center text-sm mb-1.5">
+                  <span style={{color: 'var(--muted)'}}>Consensus</span>
+                  <span className="font-bold" style={{color: consensusColor(data.consensusPct)}}>
+                    {data.consensusPct.toFixed(0)}%
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full overflow-hidden" style={{background: 'var(--border)'}}>
+                  <div className="h-full rounded-full" style={{width: `${data.consensusPct}%`, background: consensusColor(data.consensusPct)}} />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Settle */}

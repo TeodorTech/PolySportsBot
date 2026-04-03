@@ -6,6 +6,7 @@ import {getSportEmoji} from '@/lib/sportEmoji';
 import { Suspense } from 'react';
 import TimeRangeFilter from '@/components/TimeRangeFilter';
 import { parseRange, rangeToDate, DEFAULT_RANGE, TIME_RANGES, type TimeRange } from '@/lib/timeRange';
+import { calcConsensus, consensusColor } from '@/lib/thresholds';
 
 async function getStats(range: TimeRange) {
   const since = rangeToDate(range);
@@ -183,7 +184,7 @@ export default async function DashboardPage({ params, searchParams }: { params: 
               const emoji = getSportEmoji(event.title, event.sport);
               const whaleVolume = Number(event.whale_volume) || 0;
               const topVolume = Number(event.top_outcome_volume) || 0;
-              const consensus = whaleVolume > 0 ? (topVolume / whaleVolume) * 100 : 0;
+              const consensus = calcConsensus(topVolume, whaleVolume);
 
               return (
                 <Link
@@ -203,10 +204,14 @@ export default async function DashboardPage({ params, searchParams }: { params: 
                       <span>{event.whale_count || 0} {t('whaleCount')}</span>
                       <span style={{color: 'var(--subtle)'}}>·</span>
                       <span>{t('volume')}: ${(Number(event.total_volume) / 1000000).toFixed(1)}M</span>
-                    </div>
-
-                    <div className="confidence-bar">
-                      <div className="confidence-bar-fill" style={{width: `${consensus}%`}} />
+                      {consensus !== null && (
+                        <>
+                          <span style={{color: 'var(--subtle)'}}>·</span>
+                          <span className="font-semibold" style={{color: consensusColor(consensus)}}>
+                            {consensus.toFixed(0)}% consensus
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
 

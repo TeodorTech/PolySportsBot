@@ -9,7 +9,7 @@ import TimeRangeFilter from '@/components/TimeRangeFilter';
 import MinTradeFilter from '@/components/MinTradeFilter';
 import { parseRange, rangeToDate, TIME_RANGES, type TimeRange } from '@/lib/timeRange';
 import BankrollChart from '@/components/BankrollChart';
-import { parseThreshold, type MinTradeThreshold } from '@/lib/thresholds';
+import { parseThreshold, calcConsensus, consensusColor, type MinTradeThreshold } from '@/lib/thresholds';
 
 interface SettledEvent {
   id: string;
@@ -377,8 +377,8 @@ async function getStatsData(range: TimeRange, threshold: MinTradeThreshold) {
   for (const e of events) {
     const totalVol = Number(e.whale_volume) || 0;
     const topVol = Number(e.top_outcome_volume) || 0;
-    if (totalVol === 0) continue;
-    const consensusPct = (topVol / totalVol) * 100;
+    const consensusPct = calcConsensus(topVol, totalVol);
+    if (consensusPct === null) continue;
     for (const bucket of buckets) {
       if (consensusPct >= bucket.minPct && consensusPct <= bucket.maxPct) {
         bucket.total += 1;
@@ -1104,7 +1104,7 @@ export default async function StatsPage({ params, searchParams }: { params: Prom
                 const decimalOdds = Number(event.avg_price) > 0 ? 1 / Number(event.avg_price) : null;
                 const totalVol = Number(event.whale_volume) || 0;
                 const topVol = Number(event.top_outcome_volume) || 0;
-                const consensusPct = totalVol > 0 ? (topVol / totalVol) * 100 : 0;
+                const consensusPct = calcConsensus(topVol, totalVol);
 
                 return (
                   <Link
@@ -1147,7 +1147,7 @@ export default async function StatsPage({ params, searchParams }: { params: Prom
                         {event.odds && (
                           <span>{ts('settledOdds')}: <span className="font-mono font-semibold" style={{ color: 'var(--amber)' }}>@{Number(event.odds).toFixed(2)}</span></span>
                         )}
-                        <span>{ts('consensus')}: <span className="font-mono font-semibold" style={{ color: consensusPct >= 80 ? 'var(--green)' : consensusPct >= 50 ? 'var(--amber)' : 'var(--muted)' }}>{consensusPct.toFixed(0)}%</span></span>
+                        {consensusPct !== null && <span>{ts('consensus')}: <span className="font-mono font-semibold" style={{ color: consensusColor(consensusPct) }}>{consensusPct.toFixed(0)}%</span></span>}
                         <span>{event.whale_count} {t('whaleCount')}</span>
                       </div>
                     </div>
