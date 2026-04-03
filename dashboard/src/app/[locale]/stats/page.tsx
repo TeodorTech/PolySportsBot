@@ -6,8 +6,10 @@ import { getSportEmoji } from '@/lib/sportEmoji';
 import { calcOverallRoi, calcConvictionRoi, OVERALL_BANKROLL, OVERALL_STAKE, CONVICTION_BANKROLL, CONVICTION_STAKE } from '@/lib/roi';
 import { Suspense } from 'react';
 import TimeRangeFilter from '@/components/TimeRangeFilter';
+import MinTradeFilter from '@/components/MinTradeFilter';
 import { parseRange, rangeToDate, TIME_RANGES, type TimeRange } from '@/lib/timeRange';
 import BankrollChart from '@/components/BankrollChart';
+import { parseThreshold, type MinTradeThreshold } from '@/lib/thresholds';
 
 interface SettledEvent {
   id: string;
@@ -41,7 +43,7 @@ interface ConsensusBucket {
   winRate: number | null;
 }
 
-async function getStatsData(range: TimeRange) {
+async function getStatsData(range: TimeRange, threshold: MinTradeThreshold) {
   const since = rangeToDate(range);
   const dateFilter = since ? sql`AND e.created_at >= ${since}` : sql``;
 
@@ -130,7 +132,7 @@ async function getStatsData(range: TimeRange) {
     }))
     .sort((a, b) => b.total - a.total);
 
-  // --- Conviction trades (>= $50k) breakdown ---
+  // --- Conviction trades (>= threshold) breakdown ---
   const convictionRows = await sql`
     SELECT
       e.id,
@@ -142,7 +144,7 @@ async function getStatsData(range: TimeRange) {
       (
         SELECT w2.outcome
         FROM whale_activity w2
-        WHERE w2.event_id = e.id AND w2.trade_value >= 50000
+        WHERE w2.event_id = e.id AND w2.trade_value >= ${threshold}
         GROUP BY w2.outcome
         ORDER BY SUM(w2.trade_value) DESC
         LIMIT 1
@@ -150,12 +152,12 @@ async function getStatsData(range: TimeRange) {
       (
         SELECT SUM(w2.trade_value)
         FROM whale_activity w2
-        WHERE w2.event_id = e.id AND w2.trade_value >= 50000
+        WHERE w2.event_id = e.id AND w2.trade_value >= ${threshold}
       ) as big_trade_volume,
       (
         SELECT COUNT(*)
         FROM whale_activity w2
-        WHERE w2.event_id = e.id AND w2.trade_value >= 50000
+        WHERE w2.event_id = e.id AND w2.trade_value >= ${threshold}
       ) as big_trade_count
     FROM events e
     WHERE e.whales_won IS NOT NULL
@@ -181,6 +183,187 @@ async function getStatsData(range: TimeRange) {
   );
   const convictionRoi = convictionRoiResult?.roi ?? null;
   const convictionPnl = convictionRoiResult?.pnl ?? null;
+
+  // --- No-conviction events (zero trades >= $50k) ---
+  const noConvictionEvents = convictionRows.filter(r => Number(r.big_trade_count) === 0);
+  const noConvTotal = noConvictionEvents.length;
+  const noConvWins = noConvictionEvents.filter(r => r.whales_won === true).length;
+  const noConvWinRate = noConvTotal > 0 ? (noConvWins / noConvTotal) * 100 : null;
+  const noConvWithOdds = noConvictionEvents.filter(r => r.odds !== null && Number(r.odds) > 0);
+  const noConvRoiResult = calcOverallRoi(
+    noConvWithOdds.map(r => ({ won: r.whales_won === true, odds: Number(r.odds) }))
+  );
+  const noConvRoi = noConvRoiResult?.roi ?? null;
+  const noConvPnl = noConvRoiResult?.pnl ?? null;
+
+  // --- Big trade granular analytics ---
+  // Per-event: for events with settled outcomes, look at individual trade sizes and signals
+
+  // Query: for each settled event, get per-trade detail for trades >= 50k
+  const bigTradeRows = await sql`
+    SELECT
+      e.id,
+      e.whales_won,
+      e.odds,
+      e.result_outcome,
+      w.trade_value,
+      w.price,
+      w.outcome,
+      w.timestamp_utc,
+      e.created_at as event_created_at,
+      (
+        SELECT w2.outcome
+        FROM whale_activity w2
+        WHERE w2.event_id = e.id
+        GROUP BY w2.outcome
+        ORDER BY SUM(w2.trade_value) DESC
+        LIMIT 1
+      ) as consensus_outcome,
+      (
+        SELECT COUNT(DISTINCT w3.outcome)
+        FROM whale_activity w3
+        WHERE w3.event_id = e.id AND w3.trade_value >= 50000
+      ) as big_trade_outcomes_count,
+      (
+        SELECT COUNT(*)
+        FROM whale_activity w3
+        WHERE w3.event_id = e.id AND w3.trade_value >= 50000
+      ) as big_trade_count_total,
+      (
+        SELECT MAX(w3.trade_value)
+        FROM whale_activity w3
+        WHERE w3.event_id = e.id AND w3.trade_value >= 50000
+      ) as max_trade_in_event
+    FROM whale_activity w
+    JOIN events e ON e.id = w.event_id
+    WHERE e.whales_won IS NOT NULL
+      AND w.trade_value >= 50000
+      AND e.result_outcome IS NOT NULL
+    ${dateFilter}
+    ORDER BY w.trade_value DESC
+  `;
+
+  // 1. Trade size tiers — win rate by trade size bucket
+  // For each big trade, did that specific trade back the winning outcome?
+  type TierStat = { total: number; wins: number; winRate: number | null };
+  const tiers: Record<string, TierStat> = {
+    '$50k–$100k': { total: 0, wins: 0, winRate: null },
+    '$100k–$250k': { total: 0, wins: 0, winRate: null },
+    '$250k+': { total: 0, wins: 0, winRate: null },
+  };
+
+  for (const r of bigTradeRows) {
+    const val = Number(r.trade_value);
+    const tradeBacked = r.outcome;
+    const tradeWon = r.result_outcome && tradeBacked && r.result_outcome === tradeBacked;
+    let tier: string;
+    if (val < 100000) tier = '$50k–$100k';
+    else if (val < 250000) tier = '$100k–$250k';
+    else tier = '$250k+';
+    tiers[tier].total += 1;
+    if (tradeWon) tiers[tier].wins += 1;
+  }
+  for (const t of Object.values(tiers)) {
+    if (t.total > 0) t.winRate = (t.wins / t.total) * 100;
+  }
+  const tradeSizeTiers = Object.entries(tiers).map(([label, s]) => ({ label, ...s }));
+
+  // 2. Odds band — group by the price at which the big trade was placed
+  // price is the implied probability (0–1), so "favourite" = price > 0.6, "mid" = 0.4–0.6, "longshot" < 0.4
+  type BandStat = { label: string; total: number; wins: number; winRate: number | null; minPrice: number; maxPrice: number };
+  const oddsBands: BandStat[] = [
+    { label: 'Heavy fav (>70%)', minPrice: 0.70, maxPrice: 1.0, total: 0, wins: 0, winRate: null },
+    { label: 'Favourite (50–70%)', minPrice: 0.50, maxPrice: 0.70, total: 0, wins: 0, winRate: null },
+    { label: 'Pick\'em (35–50%)', minPrice: 0.35, maxPrice: 0.50, total: 0, wins: 0, winRate: null },
+    { label: 'Underdog (<35%)', minPrice: 0.0, maxPrice: 0.35, total: 0, wins: 0, winRate: null },
+  ];
+  for (const r of bigTradeRows) {
+    const price = Number(r.price);
+    const tradeWon = r.result_outcome && r.outcome && r.result_outcome === r.outcome;
+    const band = oddsBands.find(b => price >= b.minPrice && price < b.maxPrice)
+      ?? (price >= 1.0 ? oddsBands[0] : oddsBands[oddsBands.length - 1]);
+    band.total += 1;
+    if (tradeWon) band.wins += 1;
+  }
+  for (const b of oddsBands) {
+    if (b.total > 0) b.winRate = (b.wins / b.total) * 100;
+  }
+
+  // 3. Lone whale vs corroborated — per event, was there only 1 big trade or multiple?
+  // Use event-level: events with exactly 1 big trade vs events with 2+ big trades
+  const settledBigTradeEvents = bigTradeRows.reduce((map, r) => {
+    if (!map.has(r.id)) map.set(r.id, r);
+    return map;
+  }, new Map<string, typeof bigTradeRows[0]>());
+
+  let loneWon = 0, loneTotal = 0, corrWon = 0, corrTotal = 0;
+  for (const r of settledBigTradeEvents.values()) {
+    const count = Number(r.big_trade_count_total);
+    // "won" here = big_trade_outcome (top outcome by volume among $50k+ trades) matched result_outcome
+    // We re-use the same logic as convictionWins
+    const bigTradeOutcome = bigTradeRows.filter(bt => bt.id === r.id)
+      .reduce((best, bt) => {
+        if (!best || Number(bt.trade_value) > Number(best.trade_value)) return bt;
+        return best;
+      }, null as typeof bigTradeRows[0] | null)?.outcome;
+    const eventWon = r.result_outcome && bigTradeOutcome && r.result_outcome === bigTradeOutcome;
+    if (count === 1) {
+      loneTotal += 1;
+      if (eventWon) loneWon += 1;
+    } else {
+      corrTotal += 1;
+      if (eventWon) corrWon += 1;
+    }
+  }
+  const loneWinRate = loneTotal > 0 ? (loneWon / loneTotal) * 100 : null;
+  const corrWinRate = corrTotal > 0 ? (corrWon / corrTotal) * 100 : null;
+
+  // 4. Divergent signal — events where the single largest trade goes AGAINST the majority consensus outcome
+  // i.e. max_trade_outcome !== consensus_outcome
+  let divTotal = 0, divWon = 0;
+  let alignTotal = 0, alignWon = 0;
+
+  for (const r of settledBigTradeEvents.values()) {
+    // Find the single biggest trade for this event
+    const biggestTrade = bigTradeRows
+      .filter(bt => bt.id === r.id)
+      .reduce((best, bt) => (!best || Number(bt.trade_value) > Number(best.trade_value)) ? bt : best, null as typeof bigTradeRows[0] | null);
+    if (!biggestTrade) continue;
+    const biggestOutcome = biggestTrade.outcome;
+    const consensus = r.consensus_outcome;
+    const eventWon = r.result_outcome && biggestOutcome && r.result_outcome === biggestOutcome;
+    if (consensus && biggestOutcome && biggestOutcome !== consensus) {
+      // Divergent: biggest trade goes against crowd
+      divTotal += 1;
+      if (eventWon) divWon += 1;
+    } else {
+      alignTotal += 1;
+      if (eventWon) alignWon += 1;
+    }
+  }
+  const divWinRate = divTotal > 0 ? (divWon / divTotal) * 100 : null;
+  const alignWinRate = alignTotal > 0 ? (alignWon / alignTotal) * 100 : null;
+
+  // 5. Both-sides split — events where $50k+ trades landed on 2+ different outcomes
+  // big_trade_outcomes_count >= 2 means at least one big trade on each side
+  // For each such event, track which side had more volume and whether that side won
+  let splitTotal = 0, splitWon = 0;
+  const splitEventIds = new Set<string>();
+
+  for (const r of settledBigTradeEvents.values()) {
+    if (Number(r.big_trade_outcomes_count) >= 2) {
+      splitEventIds.add(r.id);
+      splitTotal += 1;
+      // "won" = the outcome with the most big-trade volume on it matched the result
+      // Re-use the same biggest-trade logic: does the dominant big-trade outcome match result?
+      const biggestTradeOutcome = bigTradeRows
+        .filter(bt => bt.id === r.id)
+        .reduce((best, bt) => (!best || Number(bt.trade_value) > Number(best.trade_value)) ? bt : best, null as typeof bigTradeRows[0] | null)?.outcome;
+      if (r.result_outcome && biggestTradeOutcome && r.result_outcome === biggestTradeOutcome) splitWon += 1;
+    }
+  }
+  const splitWinRate = splitTotal > 0 ? (splitWon / splitTotal) * 100 : null;
+  const splitPct = settledBigTradeEvents.size > 0 ? (splitTotal / settledBigTradeEvents.size) * 100 : null;
 
   // --- Consensus breakdown ---
   // Consensus = top_outcome_volume / whale_volume for each event
@@ -232,7 +415,6 @@ async function getStatsData(range: TimeRange) {
 
     // Conviction: $250 stake, only on conviction events with odds
     const isConvictionWithOdds = convictionEventIds.has(e.id) && hasOdds;
-    const convictionBalanceBeforeUpdate = convictionBalance;
     const wasFirstConviction = !hasAnyConvictionOdds && isConvictionWithOdds;
     if (isConvictionWithOdds) {
       hasAnyConvictionOdds = true;
@@ -262,16 +444,27 @@ async function getStatsData(range: TimeRange) {
     convictionTotal, convictionWins, convictionWinRate, totalBigTrades,
     convictionRoi, convictionPnl, convictionRoiCount: convictionWithOdds.length, convictionEvents,
     bankrollPoints,
+    tradeSizeTiers, oddsBands,
+    loneWinRate, loneTotal, loneWon,
+    corrWinRate, corrTotal, corrWon,
+    divWinRate, divTotal, divWon,
+    alignWinRate, alignTotal, alignWon,
+    splitTotal, splitWon, splitWinRate, splitPct,
+    totalBigTradeEvents: settledBigTradeEvents.size,
+    noConvTotal, noConvWins, noConvWinRate, noConvRoi, noConvPnl,
+    noConvRoiCount: noConvWithOdds.length, noConvictionEvents,
+    threshold,
   };
 }
 
 export default async function StatsPage({ params, searchParams }: { params: Promise<{ locale: string }>, searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
   const { locale } = await params;
-  const { range: rangeParam } = await searchParams;
+  const { range: rangeParam, minTrade: minTradeParam } = await searchParams;
   const range = parseRange(rangeParam);
+  const threshold = parseThreshold(minTradeParam);
   const t = await getTranslations('Dashboard');
   const ts = await getTranslations('Stats');
-  const data = await getStatsData(range);
+  const data = await getStatsData(range, threshold);
   const labelMap = Object.fromEntries(TIME_RANGES.map(({ labelKey }) => [labelKey, t(labelKey as Parameters<typeof t>[0])]));
 
   return (
@@ -568,6 +761,332 @@ export default async function StatsPage({ params, searchParams }: { params: Prom
                 })}
               </div>
             )}
+          </section>
+
+          {/* No-Conviction Events */}
+          <section className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+            <div className="px-5 py-4 flex items-start justify-between gap-4 flex-wrap" style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <h2 className="text-base font-bold tracking-tight" style={{ color: 'var(--text)' }}>{ts('noConvTitle')}</h2>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--subtle)' }}>
+                  Events where every trade was under <span className="font-mono font-semibold" style={{ color: 'var(--amber)' }}>${(data.threshold / 1000).toFixed(0)}k</span> — the small-money baseline.
+                </p>
+              </div>
+              <Suspense fallback={<div className="h-8" />}>
+                <MinTradeFilter current={data.threshold} />
+              </Suspense>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x" style={{ borderColor: 'var(--border)' }}>
+              <div className="px-5 py-5" style={{ background: 'var(--surface)' }}>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--subtle)' }}>Win Rate (&lt;${(data.threshold / 1000).toFixed(0)}k trades)</p>
+                {data.noConvWinRate !== null ? (
+                  <>
+                    <p className="text-3xl font-bold font-mono tracking-tight" style={{ color: data.noConvWinRate >= data.rawWinRate ? 'var(--green)' : 'var(--amber)' }}>
+                      {data.noConvWinRate.toFixed(1)}%
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--subtle)' }}>
+                      {data.noConvWins}W — {data.noConvTotal - data.noConvWins}L / {data.noConvTotal} {ts('events')}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-3xl font-bold font-mono tracking-tight" style={{ color: 'var(--subtle)' }}>N/A</p>
+                )}
+              </div>
+
+              <div className="px-5 py-5" style={{ background: 'var(--surface)' }}>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--subtle)' }}>{ts('convictionVsOverall')}</p>
+                {data.noConvWinRate !== null ? (
+                  <>
+                    <p className="text-3xl font-bold font-mono tracking-tight" style={{ color: data.noConvWinRate - data.rawWinRate >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {data.noConvWinRate - data.rawWinRate >= 0 ? '+' : ''}{(data.noConvWinRate - data.rawWinRate).toFixed(1)}pp
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--subtle)' }}>{ts('noConvVsOverallDesc')}</p>
+                  </>
+                ) : (
+                  <p className="text-3xl font-bold font-mono tracking-tight" style={{ color: 'var(--subtle)' }}>N/A</p>
+                )}
+              </div>
+
+              <div className="px-5 py-5" style={{ background: 'var(--surface)' }}>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--subtle)' }}>{ts('roi')}</p>
+                {data.noConvRoi !== null ? (
+                  <>
+                    <p className="text-3xl font-bold font-mono tracking-tight" style={{ color: data.noConvRoi >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {data.noConvRoi >= 0 ? '+' : ''}{data.noConvRoi.toFixed(1)}%
+                    </p>
+                    <p className="text-xs mt-1 font-mono font-semibold" style={{ color: data.noConvPnl! >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {data.noConvPnl! >= 0 ? '+' : ''}${data.noConvPnl!.toFixed(0)} · $100/event
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--subtle)' }}>{ts('roiFrom')} {data.noConvRoiCount} {ts('events')}</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-3xl font-bold font-mono tracking-tight" style={{ color: 'var(--subtle)' }}>N/A</p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--subtle)' }}>{ts('roiNone')}</p>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {data.noConvictionEvents.length > 0 && (
+              <div className="divide-y" style={{ borderColor: 'var(--border)', borderTop: '1px solid var(--border)' }}>
+                {data.noConvictionEvents.map((event) => {
+                  const emoji = getSportEmoji(event.title, event.sport);
+                  const won = event.whales_won === true;
+                  return (
+                    <Link
+                      key={event.id}
+                      href={`/${locale}/events/${event.id}`}
+                      className="group px-5 py-4 flex items-center gap-4 transition-all"
+                      style={{ background: 'var(--surface)' }}
+                    >
+                      <span className="text-xl shrink-0 w-8 text-center">{emoji}</span>
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className="text-sm font-semibold line-clamp-1" style={{ color: won ? 'var(--text)' : 'var(--muted)' }}>
+                            {event.title}
+                          </h3>
+                          <span className="px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wide shrink-0" style={{
+                            background: won ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                            color: won ? 'var(--green)' : 'var(--red)',
+                            border: `1px solid ${won ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
+                          }}>
+                            {won ? t('statusWin') : t('statusLoss')}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs flex-wrap" style={{ color: 'var(--subtle)' }}>
+                          {event.sport && <span>{event.sport}</span>}
+                          {event.odds && (
+                            <>
+                              <span>·</span>
+                              <span className="font-mono">{ts('settledOdds')}: <span style={{ color: 'var(--amber)' }}>@{Number(event.odds).toFixed(2)}</span></span>
+                            </>
+                          )}
+                          <span>·</span>
+                          <span>no trades ≥ ${(data.threshold / 1000).toFixed(0)}k</span>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* Big Trade Deep Dive */}
+          <section className="space-y-4">
+            <div>
+              <h2 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text)' }}>{ts('bigTradeTitle')}</h2>
+              <p className="text-sm mt-1" style={{ color: 'var(--muted)' }}>{ts('bigTradeSubtitle')}</p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+              {/* Trade Size Tiers */}
+              <section className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                <div className="px-5 py-4" style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
+                  <h3 className="text-base font-bold tracking-tight" style={{ color: 'var(--text)' }}>{ts('tierTitle')}</h3>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--subtle)' }}>{ts('tierDesc')}</p>
+                </div>
+                <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                  {data.tradeSizeTiers.map((tier) => {
+                    const wr = tier.winRate;
+                    const barColor = wr === null ? 'var(--subtle)' : wr >= 60 ? 'var(--green)' : wr >= 48 ? 'var(--amber)' : 'var(--red)';
+                    return (
+                      <div key={tier.label} className="px-5 py-4" style={{ background: 'var(--surface)' }}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-semibold font-mono" style={{ color: 'var(--text)' }}>{tier.label}</span>
+                          <span className="text-xs" style={{ color: 'var(--subtle)' }}>{tier.total} trades</span>
+                        </div>
+                        {tier.total === 0 ? (
+                          <p className="text-xs" style={{ color: 'var(--subtle)' }}>No data</p>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-3 mb-2 text-xs" style={{ color: 'var(--subtle)' }}>
+                              <span className="text-xl font-bold font-mono" style={{ color: barColor }}>
+                                {wr !== null ? `${wr.toFixed(0)}%` : '—'}
+                              </span>
+                              <span>{ts('winRate')}</span>
+                              <span>·</span>
+                              <span>{tier.wins}W {tier.total - tier.wins}L</span>
+                            </div>
+                            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+                              <div className="h-full rounded-full" style={{ width: `${wr ?? 0}%`, background: barColor }} />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="px-5 py-3" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface2)' }}>
+                  <p className="text-xs" style={{ color: 'var(--subtle)' }}>{ts('tierGlossary')}</p>
+                </div>
+              </section>
+
+              {/* Odds Band */}
+              <section className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                <div className="px-5 py-4" style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
+                  <h3 className="text-base font-bold tracking-tight" style={{ color: 'var(--text)' }}>{ts('oddsBandTitle')}</h3>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--subtle)' }}>{ts('oddsBandDesc')}</p>
+                </div>
+                <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                  {data.oddsBands.map((band) => {
+                    const wr = band.winRate;
+                    const implied = ((band.minPrice + band.maxPrice) / 2 * 100);
+                    const edge = wr !== null ? wr - implied : null;
+                    const barColor = wr === null ? 'var(--subtle)' : (edge ?? 0) >= 5 ? 'var(--green)' : (edge ?? 0) >= -5 ? 'var(--amber)' : 'var(--red)';
+                    return (
+                      <div key={band.label} className="px-5 py-4" style={{ background: 'var(--surface)' }}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{band.label}</span>
+                          <div className="flex items-center gap-2">
+                            {edge !== null && (
+                              <span className="text-xs font-mono font-bold" style={{ color: barColor }}>
+                                {edge >= 0 ? '+' : ''}{edge.toFixed(1)}pp edge
+                              </span>
+                            )}
+                            <span className="text-xs" style={{ color: 'var(--subtle)' }}>{band.total} trades</span>
+                          </div>
+                        </div>
+                        {band.total === 0 ? (
+                          <p className="text-xs" style={{ color: 'var(--subtle)' }}>No data</p>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-3 mb-2 text-xs" style={{ color: 'var(--subtle)' }}>
+                              <span className="text-xl font-bold font-mono" style={{ color: barColor }}>
+                                {wr !== null ? `${wr.toFixed(0)}%` : '—'}
+                              </span>
+                              <span>{ts('winRate')}</span>
+                              <span>·</span>
+                              <span>{band.wins}W {band.total - band.wins}L</span>
+                              <span>·</span>
+                              <span>exp. {implied.toFixed(0)}%</span>
+                            </div>
+                            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+                              <div className="h-full rounded-full" style={{ width: `${wr ?? 0}%`, background: barColor }} />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="px-5 py-3" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface2)' }}>
+                  <p className="text-xs" style={{ color: 'var(--subtle)' }}>{ts('oddsBandGlossary')}</p>
+                </div>
+              </section>
+            </div>
+
+            {/* Lone Whale vs Corroborated + Divergent Signal + Both-Sides Split */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+              {/* Lone vs Corroborated */}
+              <section className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                <div className="px-5 py-4" style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
+                  <h3 className="text-base font-bold tracking-tight" style={{ color: 'var(--text)' }}>{ts('loneTitle')}</h3>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--subtle)' }}>{ts('loneDesc')}</p>
+                </div>
+                <div className="grid grid-cols-2 divide-x" style={{ borderColor: 'var(--border)' }}>
+                  {[
+                    { label: ts('loneSingle'), wr: data.loneWinRate, w: data.loneWon, total: data.loneTotal },
+                    { label: ts('loneMultiple'), wr: data.corrWinRate, w: data.corrWon, total: data.corrTotal },
+                  ].map(({ label, wr, w, total }) => {
+                    const barColor = wr === null ? 'var(--subtle)' : wr >= 55 ? 'var(--green)' : wr >= 45 ? 'var(--amber)' : 'var(--red)';
+                    return (
+                      <div key={label} className="px-5 py-5" style={{ background: 'var(--surface)' }}>
+                        <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--subtle)' }}>{label}</p>
+                        {total === 0 ? (
+                          <p className="text-2xl font-bold font-mono" style={{ color: 'var(--subtle)' }}>N/A</p>
+                        ) : (
+                          <>
+                            <p className="text-3xl font-bold font-mono tracking-tight" style={{ color: barColor }}>
+                              {wr !== null ? `${wr.toFixed(1)}%` : '—'}
+                            </p>
+                            <p className="text-xs mt-1" style={{ color: 'var(--subtle)' }}>{w}W — {total - w}L / {total} events</p>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="px-5 py-3" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface2)' }}>
+                  <p className="text-xs" style={{ color: 'var(--subtle)' }}>{ts('loneGlossary')}</p>
+                </div>
+              </section>
+
+              {/* Divergent Signal */}
+              <section className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                <div className="px-5 py-4" style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
+                  <h3 className="text-base font-bold tracking-tight" style={{ color: 'var(--text)' }}>{ts('divTitle')}</h3>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--subtle)' }}>{ts('divDesc')}</p>
+                </div>
+                <div className="grid grid-cols-2 divide-x" style={{ borderColor: 'var(--border)' }}>
+                  {[
+                    { label: ts('divAligned'), wr: data.alignWinRate, w: data.alignWon, total: data.alignTotal },
+                    { label: ts('divDivergent'), wr: data.divWinRate, w: data.divWon, total: data.divTotal },
+                  ].map(({ label, wr, w, total }) => {
+                    const barColor = wr === null ? 'var(--subtle)' : wr >= 55 ? 'var(--green)' : wr >= 45 ? 'var(--amber)' : 'var(--red)';
+                    return (
+                      <div key={label} className="px-5 py-5" style={{ background: 'var(--surface)' }}>
+                        <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--subtle)' }}>{label}</p>
+                        {total === 0 ? (
+                          <p className="text-2xl font-bold font-mono" style={{ color: 'var(--subtle)' }}>N/A</p>
+                        ) : (
+                          <>
+                            <p className="text-3xl font-bold font-mono tracking-tight" style={{ color: barColor }}>
+                              {wr !== null ? `${wr.toFixed(1)}%` : '—'}
+                            </p>
+                            <p className="text-xs mt-1" style={{ color: 'var(--subtle)' }}>{w}W — {total - w}L / {total} events</p>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="px-5 py-3" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface2)' }}>
+                  <p className="text-xs" style={{ color: 'var(--subtle)' }}>{ts('divGlossary')}</p>
+                </div>
+              </section>
+
+              {/* Both-Sides Split */}
+              <section className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                <div className="px-5 py-4" style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
+                  <h3 className="text-base font-bold tracking-tight" style={{ color: 'var(--text)' }}>{ts('splitTitle')}</h3>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--subtle)' }}>{ts('splitDesc')}</p>
+                </div>
+                <div className="grid grid-cols-2 divide-x" style={{ borderColor: 'var(--border)' }}>
+                  <div className="px-5 py-5" style={{ background: 'var(--surface)' }}>
+                    <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--subtle)' }}>{ts('splitEventCount')}</p>
+                    <p className="text-3xl font-bold font-mono tracking-tight" style={{ color: 'var(--amber)' }}>
+                      {data.splitTotal}
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--subtle)' }}>
+                      {data.splitPct !== null ? `${data.splitPct.toFixed(0)}% of ${data.totalBigTradeEvents} events` : '—'}
+                    </p>
+                  </div>
+                  <div className="px-5 py-5" style={{ background: 'var(--surface)' }}>
+                    <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--subtle)' }}>{ts('splitWinRate')}</p>
+                    {data.splitTotal === 0 ? (
+                      <p className="text-3xl font-bold font-mono tracking-tight" style={{ color: 'var(--subtle)' }}>N/A</p>
+                    ) : (
+                      <>
+                        <p className="text-3xl font-bold font-mono tracking-tight" style={{
+                          color: data.splitWinRate !== null && data.splitWinRate >= 55 ? 'var(--green)' : data.splitWinRate !== null && data.splitWinRate >= 45 ? 'var(--amber)' : 'var(--red)'
+                        }}>
+                          {data.splitWinRate !== null ? `${data.splitWinRate.toFixed(1)}%` : '—'}
+                        </p>
+                        <p className="text-xs mt-1" style={{ color: 'var(--subtle)' }}>{data.splitWon}W — {data.splitTotal - data.splitWon}L</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="px-5 py-3" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface2)' }}>
+                  <p className="text-xs" style={{ color: 'var(--subtle)' }}>{ts('splitGlossary')}</p>
+                </div>
+              </section>
+
+            </div>
           </section>
 
           {/* Per-event breakdown */}
