@@ -3,7 +3,7 @@ import threading
 import time
 import websocket
 from datetime import datetime, timezone
-from config import CLOB_WSS_URL, MIN_TRADE_VALUE, PING_INTERVAL, REFRESH_INTERVAL
+from config import CLOB_WSS_URL, MIN_TRADE_VALUE, MIN_NOTIFY_VALUE, PING_INTERVAL, REFRESH_INTERVAL
 from gamma_api import GammaAPI, build_lookup_tables
 from notifier import Notifier
 from database import Database
@@ -98,16 +98,17 @@ class PolymarketWatcher:
                 except (ValueError, TypeError):
                     ts_str = str(ts_raw)
 
-                # Send Alert
-                Notifier.send_signal(
-                    event_name=event_name,
-                    market_name=market_name,
-                    outcome=outcome_name,
-                    side=side,
-                    price=price,
-                    value=value,
-                    ts=ts_str
-                )
+                # Send Alert (only for trades above the notify threshold)
+                if value >= MIN_NOTIFY_VALUE:
+                    Notifier.send_signal(
+                        event_name=event_name,
+                        market_name=market_name,
+                        outcome=outcome_name,
+                        side=side,
+                        price=price,
+                        value=value,
+                        ts=ts_str
+                    )
 
                 # Fetch real-time total volume for the event from Polymarket
                 event_id = self.token_to_event_id.get(token_id)
