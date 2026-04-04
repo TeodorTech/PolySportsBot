@@ -9,7 +9,7 @@ import TimeRangeFilter from '@/components/TimeRangeFilter';
 import MinTradeFilter from '@/components/MinTradeFilter';
 import { parseRange, rangeToDate, TIME_RANGES, type TimeRange } from '@/lib/timeRange';
 import BankrollChart from '@/components/BankrollChart';
-import { parseThreshold, calcConsensus, consensusColor, type MinTradeThreshold } from '@/lib/thresholds';
+import { parseThreshold, calcConsensus, type MinTradeThreshold } from '@/lib/thresholds';
 
 interface SettledEvent {
   id: string;
@@ -158,7 +158,17 @@ async function getStatsData(range: TimeRange, threshold: MinTradeThreshold) {
         SELECT COUNT(*)
         FROM whale_activity w2
         WHERE w2.event_id = e.id AND w2.trade_value >= ${threshold}
-      ) as big_trade_count
+      ) as big_trade_count,
+      (
+        SELECT AVG(w2.price)
+        FROM whale_activity w2
+        WHERE w2.event_id = e.id
+      ) as avg_price,
+      (
+        SELECT SUM(w2.trade_value)
+        FROM whale_activity w2
+        WHERE w2.event_id = e.id
+      ) as total_whale_volume
     FROM events e
     WHERE e.whales_won IS NOT NULL
     ${dateFilter}
@@ -452,7 +462,7 @@ async function getStatsData(range: TimeRange, threshold: MinTradeThreshold) {
     splitTotal, splitWon, splitWinRate, splitPct,
     totalBigTradeEvents: settledBigTradeEvents.size,
     noConvTotal, noConvWins, noConvWinRate, noConvRoi, noConvPnl,
-    noConvRoiCount: noConvWithOdds.length, noConvictionEvents,
+    noConvRoiCount: noConvWithOdds.length,
     threshold,
   };
 }
@@ -725,6 +735,9 @@ export default async function StatsPage({ params, searchParams }: { params: Prom
                 {data.convictionEvents.map((event) => {
                   const emoji = getSportEmoji(event.title, event.sport);
                   const won = event.result_outcome && event.big_trade_outcome && event.result_outcome === event.big_trade_outcome;
+                  const impliedProb = Number(event.avg_price) * 100;
+                  const entryOdds = Number(event.avg_price) > 0 ? 1 / Number(event.avg_price) : null;
+                  const totalVol = Number(event.total_whale_volume) || 0;
                   return (
                     <Link
                       key={event.id}
@@ -751,7 +764,31 @@ export default async function StatsPage({ params, searchParams }: { params: Prom
                           <span>·</span>
                           <span>{ts('convictionResult')}: <span className="font-semibold" style={{ color: 'var(--muted)' }}>{event.result_outcome || '—'}</span></span>
                           <span>·</span>
-                          <span className="font-mono">${(Number(event.big_trade_volume) / 1000).toFixed(0)}K</span>
+                          {impliedProb > 0 && (
+                            <>
+                              <span>{ts('impliedProb')}: <span className="font-mono font-semibold" style={{ color: 'var(--muted)' }}>{impliedProb.toFixed(0)}%</span></span>
+                              <span>·</span>
+                            </>
+                          )}
+                          {entryOdds && (
+                            <>
+                              <span>{ts('decimalOdds')}: <span className="font-mono font-semibold" style={{ color: 'var(--amber)' }}>{entryOdds.toFixed(2)}x</span></span>
+                              <span>·</span>
+                            </>
+                          )}
+                          {event.odds && (
+                            <>
+                              <span>{ts('settledOdds')}: <span className="font-mono font-semibold" style={{ color: 'var(--amber)' }}>@{Number(event.odds).toFixed(2)}</span></span>
+                              <span>·</span>
+                            </>
+                          )}
+                          {totalVol > 0 && (
+                            <>
+                              <span className="font-mono">${(totalVol / 1000).toFixed(0)}K vol</span>
+                              <span>·</span>
+                            </>
+                          )}
+                          <span className="font-mono">${(Number(event.big_trade_volume) / 1000).toFixed(0)}K conviction</span>
                           <span>·</span>
                           <span>{event.big_trade_count} {ts('convictionTradesSuffix')}</span>
                         </div>
@@ -828,49 +865,6 @@ export default async function StatsPage({ params, searchParams }: { params: Prom
               </div>
             </div>
 
-            {data.noConvictionEvents.length > 0 && (
-              <div className="divide-y" style={{ borderColor: 'var(--border)', borderTop: '1px solid var(--border)' }}>
-                {data.noConvictionEvents.map((event) => {
-                  const emoji = getSportEmoji(event.title, event.sport);
-                  const won = event.whales_won === true;
-                  return (
-                    <Link
-                      key={event.id}
-                      href={`/${locale}/events/${event.id}`}
-                      className="group px-5 py-4 flex items-center gap-4 transition-all"
-                      style={{ background: 'var(--surface)' }}
-                    >
-                      <span className="text-xl shrink-0 w-8 text-center">{emoji}</span>
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <div className="flex items-start justify-between gap-3">
-                          <h3 className="text-sm font-semibold line-clamp-1" style={{ color: won ? 'var(--text)' : 'var(--muted)' }}>
-                            {event.title}
-                          </h3>
-                          <span className="px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wide shrink-0" style={{
-                            background: won ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                            color: won ? 'var(--green)' : 'var(--red)',
-                            border: `1px solid ${won ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
-                          }}>
-                            {won ? t('statusWin') : t('statusLoss')}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3 text-xs flex-wrap" style={{ color: 'var(--subtle)' }}>
-                          {event.sport && <span>{event.sport}</span>}
-                          {event.odds && (
-                            <>
-                              <span>·</span>
-                              <span className="font-mono">{ts('settledOdds')}: <span style={{ color: 'var(--amber)' }}>@{Number(event.odds).toFixed(2)}</span></span>
-                            </>
-                          )}
-                          <span>·</span>
-                          <span>no trades ≥ ${(data.threshold / 1000).toFixed(0)}k</span>
-                        </div>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
           </section>
 
           {/* Big Trade Deep Dive */}
@@ -1086,74 +1080,6 @@ export default async function StatsPage({ params, searchParams }: { params: Prom
                 </div>
               </section>
 
-            </div>
-          </section>
-
-          {/* Per-event breakdown */}
-          <section className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-            <div className="px-5 py-4 flex items-center justify-between" style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
-              <h2 className="text-base font-bold tracking-tight" style={{ color: 'var(--text)' }}>{ts('perEventBreakdown')}</h2>
-              <span className="text-xs font-semibold" style={{ color: 'var(--subtle)' }}>{data.totalEvents}</span>
-            </div>
-
-            <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
-              {data.events.map((event) => {
-                const emoji = getSportEmoji(event.title, event.sport);
-                const won = event.whales_won === true;
-                const impliedProb = Number(event.avg_price) * 100;
-                const decimalOdds = Number(event.avg_price) > 0 ? 1 / Number(event.avg_price) : null;
-                const totalVol = Number(event.whale_volume) || 0;
-                const topVol = Number(event.top_outcome_volume) || 0;
-                const consensusPct = calcConsensus(topVol, totalVol);
-
-                return (
-                  <Link
-                    key={event.id}
-                    href={`/${locale}/events/${event.id}`}
-                    className="group px-5 py-4 flex items-center gap-4 transition-all"
-                    style={{ background: 'var(--surface)' }}
-                  >
-                    <span className="text-2xl shrink-0 w-10 text-center">{emoji}</span>
-
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <div className="flex items-start justify-between gap-3">
-                        <h3 className="text-sm md:text-base font-semibold line-clamp-1" style={{ color: won ? 'var(--text)' : 'var(--muted)' }}>
-                          {event.title}
-                        </h3>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {event.sport && (
-                            <span className="px-2 py-0.5 rounded text-xs font-semibold" style={{ background: 'var(--surface2)', color: 'var(--subtle)', border: '1px solid var(--border)' }}>
-                              {event.sport}
-                            </span>
-                          )}
-                          <span
-                            className="px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wide"
-                            style={{
-                              background: won ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                              color: won ? 'var(--green)' : 'var(--red)',
-                              border: `1px solid ${won ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
-                            }}
-                          >
-                            {won ? t('statusWin') : t('statusLoss')}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-4 text-xs flex-wrap" style={{ color: 'var(--subtle)' }}>
-                        <span>{ts('impliedProb')}: <span className="font-mono font-semibold" style={{ color: 'var(--muted)' }}>{impliedProb.toFixed(0)}%</span></span>
-                        {decimalOdds && (
-                          <span>{ts('decimalOdds')}: <span className="font-mono font-semibold" style={{ color: 'var(--amber)' }}>{decimalOdds.toFixed(2)}x</span></span>
-                        )}
-                        {event.odds && (
-                          <span>{ts('settledOdds')}: <span className="font-mono font-semibold" style={{ color: 'var(--amber)' }}>@{Number(event.odds).toFixed(2)}</span></span>
-                        )}
-                        {consensusPct !== null && <span>{ts('consensus')}: <span className="font-mono font-semibold" style={{ color: consensusColor(consensusPct) }}>{consensusPct.toFixed(0)}%</span></span>}
-                        <span>{event.whale_count} {t('whaleCount')}</span>
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
             </div>
           </section>
 
