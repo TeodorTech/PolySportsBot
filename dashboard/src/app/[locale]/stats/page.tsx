@@ -79,7 +79,7 @@ async function getStatsData(range: TimeRange, threshold: MinTradeThreshold) {
     WHERE e.whales_won IS NOT NULL
     ${dateFilter}
     GROUP BY e.id
-    ORDER BY e.id DESC
+    ORDER BY e.created_at DESC
   ` as unknown as SettledEvent[];
 
   if (events.length === 0) return null;
@@ -172,7 +172,7 @@ async function getStatsData(range: TimeRange, threshold: MinTradeThreshold) {
     FROM events e
     WHERE e.whales_won IS NOT NULL
     ${dateFilter}
-    ORDER BY e.id DESC
+    ORDER BY e.created_at DESC
   `;
 
   const convictionEvents = convictionRows.filter(r => Number(r.big_trade_count) > 0);
