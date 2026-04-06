@@ -11,10 +11,9 @@ Logic:
   7. Record the trade in the trades table.
 """
 
-import sys
 import json
 import requests
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 
 def log(msg: str):
@@ -37,9 +36,6 @@ from gamma_api import GammaAPI
 # Minimum single trade value to qualify an event for trading
 CONVICTION_THRESHOLD = 50_000
 
-# How many minutes before game start to consider trading
-WINDOW_MINUTES = 60
-
 
 def get_qualifying_events() -> list[dict]:
     """
@@ -60,9 +56,6 @@ def get_qualifying_events() -> list[dict]:
     except Exception as e:
         log(f"DB connection failed: {e}")
         return []
-
-    now = datetime.now(timezone.utc)
-    cutoff = now + timedelta(minutes=WINDOW_MINUTES)
 
     query = """
         SELECT
@@ -121,19 +114,6 @@ def get_token_id_for_outcome(event_id: str, outcome_label: str) -> tuple[str | N
     except Exception as e:
         log(f"Failed to fetch event details for {event_id}: {e}")
         return None, None
-
-    # Check start time — only proceed if game starts within WINDOW_MINUTES
-    start_raw = event_data.get("startTime") or event_data.get("startDate")
-    if start_raw:
-        try:
-            start_dt = datetime.fromisoformat(start_raw.replace("Z", "+00:00"))
-            now = datetime.now(timezone.utc)
-            minutes_to_start = (start_dt - now).total_seconds() / 60
-            if minutes_to_start > WINDOW_MINUTES or minutes_to_start < 0:
-                log(f"Event {event_id} starts in {minutes_to_start:.0f}m — outside window, skipping.")
-                return None, None
-        except Exception:
-            pass
 
     for market in (event_data.get("markets") or []):
         outcomes_raw = market.get("outcomes")
@@ -201,6 +181,7 @@ def place_trade(token_id: str, price: float, amount_usd: float) -> str | None:
         return None
 
     try:
+        log(f"  [CLOB] Initializing client (chain_id={POLY_CHAIN_ID})...")
         client = ClobClient(
             host="https://clob.polymarket.com",
             key=POLY_PRIVATE_KEY,
@@ -218,24 +199,50 @@ def place_trade(token_id: str, price: float, amount_usd: float) -> str | None:
             log("Calculated size is 0 — skipping.")
             return None
 
+        log(f"  [CLOB] Creating market order — token={token_id} amount=${amount_usd} size={size} shares...")
         order_args = MarketOrderArgs(
             token_id=token_id,
             amount=amount_usd,
         )
         signed_order = client.create_market_order(order_args)
+        log(f"  [CLOB] Order signed, submitting...")
         resp = client.post_order(signed_order, OrderType.FOK)
+        log(f"  [CLOB] Raw response: {resp}")
         order_id = resp.get("orderID") or resp.get("id") or str(resp)
         return order_id
 
     except Exception as e:
-        log(f"Order placement failed: {e}")
+        log(f"  [CLOB] Order placement failed: {type(e).__name__}: {e}")
         return None
+
+
+def has_any_trade() -> bool:
+    """Return True if any trade has ever been placed (global lock for testing)."""
+    import psycopg2
+    if not DATABASE_URL:
+        return False
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        with conn.cursor() as cur:
+            cur.execute('SELECT 1 FROM trades LIMIT 1')
+            return cur.fetchone() is not None
+    except Exception as e:
+        log(f"DB check failed: {e}")
+        return False
+    finally:
+        conn.close()
 
 
 def run():
     log("=" * 60)
     log("TRADER JOB STARTED")
-    log(f"Config — amount: ${TRADE_AMOUNT} | window: {WINDOW_MINUTES}min | conviction: ${CONVICTION_THRESHOLD:,}")
+    log(f"Config — amount: ${TRADE_AMOUNT} | conviction: ${CONVICTION_THRESHOLD:,}")
+
+    if has_any_trade():
+        log("A trade has already been placed — locked for testing. Clear the trades table to re-enable.")
+        log("TRADER JOB FINISHED")
+        log("=" * 60)
+        return
 
     events = get_qualifying_events()
     if not events:
@@ -244,56 +251,51 @@ def run():
         log("=" * 60)
         return
 
-    log(f"Found {len(events)} qualifying event(s).")
+    log(f"Found {len(events)} qualifying event(s). Taking the first one.")
 
-    traded = 0
-    skipped = 0
+    ev = events[0]
+    event_id = ev["event_id"]
+    event_title = ev["event_title"]
+    consensus_outcome = ev["consensus_outcome"]
+    consensus_volume = ev["consensus_volume"]
 
-    for ev in events:
-        event_id = ev["event_id"]
-        event_title = ev["event_title"]
-        consensus_outcome = ev["consensus_outcome"]
-        consensus_volume = ev["consensus_volume"]
+    log(f"Checking: {event_title}")
+    log(f"  Consensus outcome: {consensus_outcome} (${consensus_volume:,.0f} whale volume)")
 
-        log(f"Checking: {event_title}")
-        log(f"  Consensus outcome: {consensus_outcome} (${consensus_volume:,.0f} whale volume)")
+    token_id, price = get_token_id_for_outcome(event_id, consensus_outcome)
+    if not token_id:
+        log(f"  SKIP — could not find token for outcome '{consensus_outcome}'.")
+        log("TRADER JOB FINISHED")
+        log("=" * 60)
+        return
+    if not price:
+        log(f"  SKIP — could not get price for '{consensus_outcome}'.")
+        log("TRADER JOB FINISHED")
+        log("=" * 60)
+        return
 
-        if Database.has_trade_for_event(event_id):
-            log(f"  SKIP — already traded this event.")
-            skipped += 1
-            continue
+    log(f"  Token ID: {token_id}")
+    log(f"  Best ask: {price:.4f} (implied prob: {price*100:.1f}%)")
+    log(f"  Trade size: ${TRADE_AMOUNT} → ~{round(TRADE_AMOUNT/price, 2)} shares")
+    log(f"  Attempting order — event_id={event_id} outcome='{consensus_outcome}' token={token_id} price={price} amount=${TRADE_AMOUNT}")
 
-        token_id, price = get_token_id_for_outcome(event_id, consensus_outcome)
-        if not token_id:
-            skipped += 1
-            continue
-        if not price:
-            log(f"  SKIP — could not get price for {consensus_outcome}.")
-            skipped += 1
-            continue
+    order_id = place_trade(token_id, price, TRADE_AMOUNT)
 
-        log(f"  Token: {token_id} | Best ask: {price:.4f} ({price*100:.1f}%)")
-        log(f"  Placing ${TRADE_AMOUNT} market buy on '{consensus_outcome}'...")
+    if order_id:
+        log(f"  SUCCESS — Order ID: {order_id}")
+        log(f"  Saved trade to DB — event='{event_title}' outcome='{consensus_outcome}' amount=${TRADE_AMOUNT}")
+        Database.save_trade(
+            event_id=event_id,
+            outcome=consensus_outcome,
+            token_id=token_id,
+            price=price,
+            amount_usd=TRADE_AMOUNT,
+            order_id=order_id,
+            status="placed",
+        )
+    else:
+        log(f"  FAILED — event='{event_title}' event_id={event_id} outcome='{consensus_outcome}' token={token_id} price={price}")
 
-        order_id = place_trade(token_id, price, TRADE_AMOUNT)
-
-        if order_id:
-            log(f"  SUCCESS — Order ID: {order_id}")
-            Database.save_trade(
-                event_id=event_id,
-                outcome=consensus_outcome,
-                token_id=token_id,
-                price=price,
-                amount_usd=TRADE_AMOUNT,
-                order_id=order_id,
-                status="placed",
-            )
-            traded += 1
-        else:
-            log(f"  FAILED — could not place trade for {event_title}.")
-            skipped += 1
-
-    log(f"Summary — traded: {traded} | skipped: {skipped}")
     log("TRADER JOB FINISHED")
     log("=" * 60)
 
