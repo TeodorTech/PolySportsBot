@@ -46,6 +46,18 @@ class Database:
                         ALTER TABLE events ADD COLUMN IF NOT EXISTS outcomes TEXT[];
                         ALTER TABLE events ADD COLUMN IF NOT EXISTS result_outcome TEXT;
 
+                        CREATE TABLE IF NOT EXISTS trades (
+                            id SERIAL PRIMARY KEY,
+                            event_id TEXT REFERENCES events(id),
+                            outcome TEXT NOT NULL,
+                            token_id TEXT NOT NULL,
+                            price DECIMAL(10, 4),
+                            amount_usd DECIMAL(18, 2),
+                            order_id TEXT,
+                            status TEXT DEFAULT 'placed',
+                            placed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                        );
+
                         CREATE TABLE IF NOT EXISTS whale_activity (
                             id SERIAL PRIMARY KEY,
                             event_id TEXT REFERENCES events(id),
@@ -100,5 +112,39 @@ class Database:
             print(f"  [DB INFO] Whale activity saved to database (Vol: ${total_volume:,.0f}).")
         except Exception as e:
             print(f"  [DB ERROR] Failed to save whale activity: {e}")
+        finally:
+            conn.close()
+
+    @staticmethod
+    def has_trade_for_event(event_id: str) -> bool:
+        """Return True if we have already placed a trade for this event."""
+        conn = Database.get_connection()
+        if not conn:
+            return False
+        try:
+            with conn.cursor() as cur:
+                cur.execute('SELECT 1 FROM trades WHERE event_id = %s LIMIT 1', (event_id,))
+                return cur.fetchone() is not None
+        except Exception as e:
+            print(f"[DB ERROR] has_trade_for_event: {e}")
+            return False
+        finally:
+            conn.close()
+
+    @staticmethod
+    def save_trade(event_id: str, outcome: str, token_id: str, price: float, amount_usd: float, order_id: str, status: str = 'placed'):
+        """Record a placed trade."""
+        conn = Database.get_connection()
+        if not conn:
+            return
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute('''
+                        INSERT INTO trades (event_id, outcome, token_id, price, amount_usd, order_id, status)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ''', (event_id, outcome, token_id, price, amount_usd, order_id, status))
+        except Exception as e:
+            print(f"[DB ERROR] save_trade: {e}")
         finally:
             conn.close()

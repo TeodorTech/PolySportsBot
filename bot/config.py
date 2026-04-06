@@ -18,6 +18,14 @@ TELEGRAM_ENABLED = True
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8326363584:AAHhOnM2fCWi6IVgXZBOL3bPgE4kDmm2pE4")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "7301455234")
 
+# ── Trader Config ─────────────────────────────────────────────────────────────
+TRADE_AMOUNT = float(os.getenv("TRADE_AMOUNT", 10))       # USD per trade
+POLY_PRIVATE_KEY = os.getenv("POLY_PRIVATE_KEY")          # Wallet private key (0x...)
+POLY_API_KEY = os.getenv("POLY_API_KEY")
+POLY_API_SECRET = os.getenv("POLY_API_SECRET")
+POLY_API_PASSPHRASE = os.getenv("POLY_API_PASSPHRASE")
+POLY_CHAIN_ID = int(os.getenv("POLY_CHAIN_ID", 137))      # 137 = Polygon mainnet
+
 # ── Database Config ────────────────────────────────────────────────────────────
 # Railway automatically provides DATABASE_URL
 DATABASE_URL = os.getenv("DATABASE_URL")
