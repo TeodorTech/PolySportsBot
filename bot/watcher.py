@@ -150,7 +150,8 @@ class PolymarketWatcher:
                     value=value,
                     ts=ts_str,
                     sport=sport,
-                    outcomes=all_outcomes
+                    outcomes=all_outcomes,
+                    token_id=token_id,
                 )
 
         except (json.JSONDecodeError, TypeError):

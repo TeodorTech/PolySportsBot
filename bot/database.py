@@ -62,6 +62,7 @@ class Database:
                             id SERIAL PRIMARY KEY,
                             event_id TEXT REFERENCES events(id),
                             outcome TEXT NOT NULL,
+                            token_id TEXT,
                             side TEXT,
                             price DECIMAL(10, 4),
                             trade_value DECIMAL(18, 2),
@@ -69,6 +70,8 @@ class Database:
                             external_ts TEXT,
                             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
                         );
+
+                        ALTER TABLE whale_activity ADD COLUMN IF NOT EXISTS token_id TEXT;
                     ''')
             print("[DB INFO] Database schema initialized (Events & Whale Activity).")
         except Exception as e:
@@ -77,7 +80,7 @@ class Database:
             conn.close()
 
     @staticmethod
-    def save_whale_activity(event_id: str, event_name: str, total_volume: float, outcome: str, side: str, price: float, value: float, ts: str, sport: str = 'Sports', outcomes: list = None):
+    def save_whale_activity(event_id: str, event_name: str, total_volume: float, outcome: str, side: str, price: float, value: float, ts: str, sport: str = 'Sports', outcomes: list = None, token_id: str = None):
         """Save a new whale activity to the database, processing the event upsert first."""
         conn = Database.get_connection()
         if not conn:
@@ -105,10 +108,10 @@ class Database:
 
                     # 2. INSERT the whale activity
                     cur.execute('''
-                        INSERT INTO whale_activity 
-                        (event_id, outcome, side, price, trade_value, timestamp_utc, external_ts)
-                        VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s)
-                    ''', (event_id, outcome, side, price, value, ts))
+                        INSERT INTO whale_activity
+                        (event_id, outcome, token_id, side, price, trade_value, timestamp_utc, external_ts)
+                        VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s)
+                    ''', (event_id, outcome, token_id, side, price, value, ts))
             print(f"  [DB INFO] Whale activity saved to database (Vol: ${total_volume:,.0f}).")
         except Exception as e:
             print(f"  [DB ERROR] Failed to save whale activity: {e}")

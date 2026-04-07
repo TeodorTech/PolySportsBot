@@ -46,7 +46,7 @@ def get_qualifying_events() -> list[dict]:
     Query the DB for active events with at least one whale trade >= CONVICTION_THRESHOLD.
 
     Returns a list of dicts:
-        {event_id, event_title, consensus_outcome, consensus_volume}
+        {event_id, event_title, consensus_outcome, consensus_token_id, consensus_volume}
     """
     import psycopg2
 
@@ -65,6 +65,7 @@ def get_qualifying_events() -> list[dict]:
             e.id          AS event_id,
             e.title       AS event_title,
             w.outcome     AS consensus_outcome,
+            w.token_id    AS consensus_token_id,
             SUM(w.trade_value) AS consensus_volume
         FROM events e
         JOIN whale_activity w ON w.event_id = e.id
@@ -75,12 +76,12 @@ def get_qualifying_events() -> list[dict]:
               WHERE w2.event_id = e.id
                 AND w2.trade_value >= %s
           )
-        GROUP BY e.id, e.title, w.outcome
+        GROUP BY e.id, e.title, w.outcome, w.token_id
         HAVING SUM(w.trade_value) = (
             SELECT SUM(w3.trade_value)
             FROM whale_activity w3
             WHERE w3.event_id = e.id
-            GROUP BY w3.outcome
+            GROUP BY w3.outcome, w3.token_id
             ORDER BY SUM(w3.trade_value) DESC
             LIMIT 1
         )
@@ -98,7 +99,8 @@ def get_qualifying_events() -> list[dict]:
                         "event_id": row[0],
                         "event_title": row[1],
                         "consensus_outcome": row[2],
-                        "consensus_volume": float(row[3]),
+                        "consensus_token_id": row[3],
+                        "consensus_volume": float(row[4]),
                     })
     except Exception as e:
         log(f"DB query failed: {e}")
@@ -108,10 +110,14 @@ def get_qualifying_events() -> list[dict]:
     return results
 
 
-def get_token_id_for_outcome(event_id: str, outcome_label: str) -> tuple:
+def get_token_id_for_outcome(event_id: str, outcome_label: str, override_token_id: str = None) -> tuple:
     """
     Fetch event details from Gamma API and return the (token_id, best_ask_price)
     for the given outcome label.
+
+    If override_token_id is provided (e.g. from stored whale_activity.token_id),
+    it is used directly instead of searching by label — this resolves ambiguity
+    in soccer markets where multiple markets share "Yes"/"No" outcomes.
     """
     try:
         event_data = GammaAPI.fetch_event_details(event_id)
@@ -133,6 +139,11 @@ def get_token_id_for_outcome(event_id: str, outcome_label: str) -> tuple:
             log(f"  Game started {abs(minutes_to_start):.0f}min ago — proceeding.")
         except Exception:
             pass
+
+    # If we already know the exact token, just fetch its price.
+    if override_token_id:
+        price = get_best_ask(override_token_id)
+        return override_token_id, price
 
     for market in (event_data.get("markets") or []):
         outcomes_raw = market.get("outcomes")
@@ -241,7 +252,7 @@ def place_trade(client, token_id: str, price: float, amount_usd: float):
         log(f"  [CLOB] Available balance: ${usdc_balance:.2f} USDC")
         if usdc_balance < amount_usd:
             log(f"  [CLOB] INSUFFICIENT BALANCE — need ${amount_usd}, have ${usdc_balance:.2f}")
-            return None
+            return None, None
 
         log(f"  [CLOB] Creating market order — token={token_id} amount=${amount_usd}...")
         order_args = MarketOrderArgs(
@@ -259,13 +270,22 @@ def place_trade(client, token_id: str, price: float, amount_usd: float):
         order_id = resp.get("orderID") or resp.get("id")
         if not order_id or status.lower() not in ("matched", "filled", "mev"):
             log(f"  [CLOB] Order not filled — status='{status}' response={resp}")
-            return None
+            return None, None
 
-        return order_id
+        # Use actual fill price from response if available, fall back to pre-order best ask
+        fill_price = None
+        try:
+            fill_price = float(resp.get("price") or resp.get("avgPrice") or resp.get("average_price") or 0) or None
+        except (TypeError, ValueError):
+            pass
+        actual_price = fill_price or price
+        log(f"  [CLOB] Fill price: {actual_price:.4f} (source: {'response' if fill_price else 'best_ask fallback'})")
+
+        return order_id, actual_price
 
     except Exception as e:
         log(f"  [CLOB] Order placement failed: {type(e).__name__}: {e}")
-        return None
+        return None, None
 
 
 
@@ -300,6 +320,8 @@ def run():
         consensus_outcome = ev["consensus_outcome"]
         consensus_volume = ev["consensus_volume"]
 
+        consensus_token_id = ev.get("consensus_token_id")
+
         log(f"Checking: {event_title}")
         log(f"  Consensus outcome: {consensus_outcome} (${consensus_volume:,.0f} whale volume)")
 
@@ -309,8 +331,12 @@ def run():
             skipped += 1
             continue
 
-        # Get token + price
-        token_id, price = get_token_id_for_outcome(event_id, consensus_outcome)
+        # Get token + price — prefer stored token_id (handles Yes/No soccer markets
+        # where multiple markets share the same outcome label).
+        # Fall back to outcome-label search for older records without a token_id.
+        token_id, price = get_token_id_for_outcome(
+            event_id, consensus_outcome, override_token_id=consensus_token_id
+        )
         if not token_id:
             skipped += 1
             continue
@@ -324,7 +350,7 @@ def run():
         log(f"  Trade size: ${TRADE_AMOUNT} → ~{round(TRADE_AMOUNT/price, 2)} shares")
         log(f"  Attempting order — event_id={event_id} outcome='{consensus_outcome}' token={token_id} price={price} amount=${TRADE_AMOUNT}")
 
-        order_id = place_trade(client, token_id, price, TRADE_AMOUNT)
+        order_id, fill_price = place_trade(client, token_id, price, TRADE_AMOUNT)
 
         if order_id:
             log(f"  SUCCESS — Order ID: {order_id}")
@@ -333,7 +359,7 @@ def run():
                 event_id=event_id,
                 outcome=consensus_outcome,
                 token_id=token_id,
-                price=price,
+                price=fill_price,
                 amount_usd=TRADE_AMOUNT,
                 order_id=order_id,
                 status="placed",
@@ -342,7 +368,7 @@ def run():
                 success=True,
                 event_name=event_title,
                 outcome=consensus_outcome,
-                price=price,
+                price=fill_price,
                 amount_usd=TRADE_AMOUNT,
                 order_id=order_id,
             )

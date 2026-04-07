@@ -52,32 +52,43 @@ class TestFOKResponseParsing:
             return place_trade(mock_client, "token123", 0.55, 5.0)
 
     def test_matched_status_returns_order_id(self):
-        result = self._call_place_trade({"orderID": "abc123", "status": "matched"})
-        assert result == "abc123"
+        order_id, _ = self._call_place_trade({"orderID": "abc123", "status": "matched"})
+        assert order_id == "abc123"
 
     def test_filled_status_returns_order_id(self):
-        result = self._call_place_trade({"orderID": "abc123", "status": "filled"})
-        assert result == "abc123"
+        order_id, _ = self._call_place_trade({"orderID": "abc123", "status": "filled"})
+        assert order_id == "abc123"
 
     def test_mev_status_returns_order_id(self):
-        result = self._call_place_trade({"orderID": "abc123", "status": "mev"})
-        assert result == "abc123"
+        order_id, _ = self._call_place_trade({"orderID": "abc123", "status": "mev"})
+        assert order_id == "abc123"
+
+    def test_fill_price_from_response(self):
+        order_id, price = self._call_place_trade({"orderID": "abc123", "status": "matched", "price": "0.62"})
+        assert order_id == "abc123"
+        assert price == 0.62
+
+    def test_fill_price_falls_back_to_best_ask(self):
+        order_id, price = self._call_place_trade({"orderID": "abc123", "status": "matched"})
+        assert order_id == "abc123"
+        assert price == 0.55  # best_ask passed into place_trade
 
     def test_cancelled_status_returns_none(self):
-        result = self._call_place_trade({"orderID": "abc123", "status": "cancelled"})
-        assert result is None
+        order_id, price = self._call_place_trade({"orderID": "abc123", "status": "cancelled"})
+        assert order_id is None
+        assert price is None
 
     def test_empty_status_returns_none(self):
-        result = self._call_place_trade({"orderID": "abc123", "status": ""})
-        assert result is None
+        order_id, price = self._call_place_trade({"orderID": "abc123", "status": ""})
+        assert order_id is None
 
     def test_missing_order_id_returns_none(self):
-        result = self._call_place_trade({"status": "matched"})
-        assert result is None
+        order_id, price = self._call_place_trade({"status": "matched"})
+        assert order_id is None
 
     def test_empty_response_returns_none(self):
-        result = self._call_place_trade({})
-        assert result is None
+        order_id, price = self._call_place_trade({})
+        assert order_id is None
 
 
 # ---------------------------------------------------------------------------
@@ -99,16 +110,16 @@ class TestBalanceCheck:
             return place_trade(mock_client, "token123", 0.55, amount_usd)
 
     def test_sufficient_balance_places_trade(self):
-        result = self._call_place_trade_with_balance(balance_usdc=100.0, amount_usd=5.0)
-        assert result == "abc123"
+        order_id, _ = self._call_place_trade_with_balance(balance_usdc=100.0, amount_usd=5.0)
+        assert order_id == "abc123"
 
     def test_exact_balance_places_trade(self):
-        result = self._call_place_trade_with_balance(balance_usdc=5.0, amount_usd=5.0)
-        assert result == "abc123"
+        order_id, _ = self._call_place_trade_with_balance(balance_usdc=5.0, amount_usd=5.0)
+        assert order_id == "abc123"
 
     def test_insufficient_balance_returns_none(self):
-        result = self._call_place_trade_with_balance(balance_usdc=4.99, amount_usd=5.0)
-        assert result is None
+        order_id, _ = self._call_place_trade_with_balance(balance_usdc=4.99, amount_usd=5.0)
+        assert order_id is None
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +194,7 @@ class TestDedupGuard:
              patch("trader.init_clob_client", return_value=MagicMock()), \
              patch("trader.Database.has_trade_for_event", return_value=False), \
              patch("trader.get_token_id_for_outcome", return_value=("token_jets", 0.55)), \
-             patch("trader.place_trade", return_value="order_abc") as mock_trade, \
+             patch("trader.place_trade", return_value=("order_abc", 0.55)) as mock_trade, \
              patch("trader.Database.save_trade"), \
              patch("trader.Notifier.send_trade_alert"):
             from trader import run
@@ -199,7 +210,7 @@ class TestDedupGuard:
              patch("trader.init_clob_client", return_value=MagicMock()), \
              patch("trader.Database.has_trade_for_event", return_value=False), \
              patch("trader.get_token_id_for_outcome", return_value=("token_jets", 0.55)), \
-             patch("trader.place_trade", return_value=None), \
+             patch("trader.place_trade", return_value=(None, None)), \
              patch("trader.Database.save_trade") as mock_save, \
              patch("trader.Notifier.send_trade_alert"):
             from trader import run
