@@ -35,6 +35,7 @@ from config import (
 )
 from database import Database
 from gamma_api import GammaAPI
+from notifier import Notifier
 
 # Minimum single trade value to qualify an event for trading
 CONVICTION_THRESHOLD = 50_000
@@ -42,8 +43,7 @@ CONVICTION_THRESHOLD = 50_000
 
 def get_qualifying_events() -> list[dict]:
     """
-    Query the DB for active events that start within the next WINDOW_MINUTES
-    and have at least one whale trade >= CONVICTION_THRESHOLD.
+    Query the DB for active events with at least one whale trade >= CONVICTION_THRESHOLD.
 
     Returns a list of dicts:
         {event_id, event_title, consensus_outcome, consensus_volume}
@@ -119,17 +119,14 @@ def get_token_id_for_outcome(event_id: str, outcome_label: str) -> tuple:
         log(f"Failed to fetch event details for {event_id}: {e}")
         return None, None
 
-    # Check start time — only proceed if game starts within WINDOW_MINUTES
+    # Log start time for context but don't filter — trust market active status instead
     start_raw = event_data.get("startTime") or event_data.get("startDate")
     if start_raw:
         try:
             start_dt = datetime.fromisoformat(start_raw.replace("Z", "+00:00"))
             now = datetime.now(timezone.utc)
             minutes_to_start = (start_dt - now).total_seconds() / 60
-            if minutes_to_start > WINDOW_MINUTES or minutes_to_start < 0:
-                log(f"  SKIP — starts in {minutes_to_start:.0f}min, outside {WINDOW_MINUTES}min window.")
-                return None, None
-            log(f"  Starts in {minutes_to_start:.0f}min — within window.")
+            log(f"  Starts in {minutes_to_start:.0f}min (market active status is the gate).")
         except Exception:
             pass
 
@@ -181,32 +178,31 @@ def get_best_ask(token_id: str):
     return None
 
 
-def place_trade(token_id: str, price: float, amount_usd: float):
+def init_clob_client():
     """
-    Place a market buy order via py-clob-client.
-    Returns the order ID on success, None on failure.
+    Initialize and return a CLOB client with derived API credentials.
+    Called once at startup — credentials are reused across all trades in the session.
+    Returns None if credentials or dependencies are missing.
     """
     if not POLY_PRIVATE_KEY:
-        log("POLY_PRIVATE_KEY not set — cannot place trade.")
+        log("POLY_PRIVATE_KEY not set — cannot initialize CLOB client.")
         return None
 
     try:
         from py_clob_client.client import ClobClient
-        from py_clob_client.clob_types import MarketOrderArgs, OrderType, ApiCreds, BalanceAllowanceParams, AssetType
-        from py_clob_client.constants import POLYGON
     except ImportError:
         log("py-clob-client not installed. Run: pip install py-clob-client")
         return None
 
     try:
-        log(f"  [CLOB] Initializing client (chain_id={POLY_CHAIN_ID})...")
-        client = ClobClient(
+        log(f"[CLOB] Initializing client (chain_id={POLY_CHAIN_ID})...")
+        base_client = ClobClient(
             host="https://clob.polymarket.com",
             key=POLY_PRIVATE_KEY,
             chain_id=POLY_CHAIN_ID,
         )
-        creds = client.derive_api_key()
-        log(f"  [CLOB] Using derived API key: {creds.api_key}")
+        creds = base_client.derive_api_key()
+        log(f"[CLOB] Derived API key: {creds.api_key}")
         client = ClobClient(
             host="https://clob.polymarket.com",
             key=POLY_PRIVATE_KEY,
@@ -215,12 +211,24 @@ def place_trade(token_id: str, price: float, amount_usd: float):
             signature_type=2,
             funder=POLY_FUNDER,
         )
+        return client
+    except Exception as e:
+        log(f"[CLOB] Failed to initialize client: {type(e).__name__}: {e}")
+        return None
 
-        size = round(amount_usd / price, 4) if price else 0
-        if size <= 0:
-            log("Calculated size is 0 — skipping.")
-            return None
 
+def place_trade(client, token_id: str, price: float, amount_usd: float):
+    """
+    Place a market buy order via py-clob-client.
+    Returns the order ID on success, None on failure.
+    """
+    try:
+        from py_clob_client.clob_types import MarketOrderArgs, OrderType, BalanceAllowanceParams, AssetType
+    except ImportError:
+        log("py-clob-client not installed.")
+        return None
+
+    try:
         log(f"  [CLOB] Updating balance allowance...")
         client.update_balance_allowance(params=BalanceAllowanceParams(asset_type=AssetType.COLLATERAL))
         balance_data = client.get_balance_allowance(params=BalanceAllowanceParams(asset_type=AssetType.COLLATERAL))
@@ -231,7 +239,7 @@ def place_trade(token_id: str, price: float, amount_usd: float):
             log(f"  [CLOB] INSUFFICIENT BALANCE — need ${amount_usd}, have ${usdc_balance:.2f}")
             return None
 
-        log(f"  [CLOB] Creating market order — token={token_id} amount=${amount_usd} size={size} shares...")
+        log(f"  [CLOB] Creating market order — token={token_id} amount=${amount_usd}...")
         order_args = MarketOrderArgs(
             token_id=token_id,
             amount=amount_usd,
@@ -241,7 +249,14 @@ def place_trade(token_id: str, price: float, amount_usd: float):
         log(f"  [CLOB] Order signed, submitting...")
         resp = client.post_order(signed_order, OrderType.FOK)
         log(f"  [CLOB] Raw response: {resp}")
-        order_id = resp.get("orderID") or resp.get("id") or str(resp)
+
+        # FOK orders must be explicitly confirmed as filled — any other status means failure
+        status = resp.get("status", "")
+        order_id = resp.get("orderID") or resp.get("id")
+        if not order_id or status.lower() not in ("matched", "filled", "mev"):
+            log(f"  [CLOB] Order not filled — status='{status}' response={resp}")
+            return None
+
         return order_id
 
     except Exception as e:
@@ -249,13 +264,12 @@ def place_trade(token_id: str, price: float, amount_usd: float):
         return None
 
 
-WINDOW_MINUTES = 60
 
 
 def run():
     log("=" * 60)
     log("TRADER JOB STARTED")
-    log(f"Config — amount: ${TRADE_AMOUNT} | window: {WINDOW_MINUTES}min | conviction: ${CONVICTION_THRESHOLD:,}")
+    log(f"Config — amount: ${TRADE_AMOUNT} | conviction: ${CONVICTION_THRESHOLD:,}")
 
     events = get_qualifying_events()
     if not events:
@@ -265,6 +279,13 @@ def run():
         return
 
     log(f"Found {len(events)} qualifying event(s).")
+
+    client = init_clob_client()
+    if not client:
+        log("Could not initialize CLOB client — aborting run.")
+        log("TRADER JOB FINISHED")
+        log("=" * 60)
+        return
 
     traded = 0
     skipped = 0
@@ -284,7 +305,7 @@ def run():
             skipped += 1
             continue
 
-        # Get token + price, also checks the time window
+        # Get token + price
         token_id, price = get_token_id_for_outcome(event_id, consensus_outcome)
         if not token_id:
             skipped += 1
@@ -299,7 +320,7 @@ def run():
         log(f"  Trade size: ${TRADE_AMOUNT} → ~{round(TRADE_AMOUNT/price, 2)} shares")
         log(f"  Attempting order — event_id={event_id} outcome='{consensus_outcome}' token={token_id} price={price} amount=${TRADE_AMOUNT}")
 
-        order_id = place_trade(token_id, price, TRADE_AMOUNT)
+        order_id = place_trade(client, token_id, price, TRADE_AMOUNT)
 
         if order_id:
             log(f"  SUCCESS — Order ID: {order_id}")
@@ -313,9 +334,25 @@ def run():
                 order_id=order_id,
                 status="placed",
             )
+            Notifier.send_trade_alert(
+                success=True,
+                event_name=event_title,
+                outcome=consensus_outcome,
+                price=price,
+                amount_usd=TRADE_AMOUNT,
+                order_id=order_id,
+            )
             traded += 1
         else:
             log(f"  FAILED — event='{event_title}' event_id={event_id} outcome='{consensus_outcome}' token={token_id} price={price}")
+            Notifier.send_trade_alert(
+                success=False,
+                event_name=event_title,
+                outcome=consensus_outcome,
+                price=price,
+                amount_usd=TRADE_AMOUNT,
+                reason="order rejected or not filled — check logs",
+            )
             skipped += 1
 
     log(f"Summary — traded: {traded} | skipped: {skipped}")
@@ -325,7 +362,7 @@ def run():
 
 if __name__ == "__main__":
     import time
-    POLL_INTERVAL = 20 * 60  # 20 minutes
+    POLL_INTERVAL = 5 * 60  # 5 minutes
     while True:
         try:
             run()

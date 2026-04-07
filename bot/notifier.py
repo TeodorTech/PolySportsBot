@@ -61,6 +61,48 @@ class Notifier:
                 daemon=True,
             ).start()
 
+    @classmethod
+    def send_trade_alert(cls, success: bool, event_name: str, outcome: str, price: float, amount_usd: float, order_id: str = None, reason: str = None):
+        """Notify on trade placement — success or failure."""
+        if success:
+            header = f"✅ TRADE PLACED — {event_name.upper()}"
+            body_lines = [
+                f"  Outcome : {outcome}",
+                f"  Price   : {price:.4f} ({price*100:.1f}%)",
+                f"  Amount  : ${amount_usd}",
+                f"  Order ID: {order_id}",
+            ]
+        else:
+            header = f"❌ TRADE FAILED — {event_name.upper()}"
+            body_lines = [
+                f"  Outcome : {outcome}",
+                f"  Price   : {price:.4f} ({price*100:.1f}%)",
+                f"  Amount  : ${amount_usd}",
+                f"  Reason  : {reason or 'unknown'}",
+            ]
+
+        sep = "=" * 70
+        lines = [sep, f"  {header}", sep] + body_lines + [sep]
+        print("\n" + "\n".join(lines))
+
+        if TELEGRAM_ENABLED:
+            def h_esc(s: str) -> str:
+                return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+            tg_body = f"<b>{h_esc(header)}</b>\n\n"
+            for line in body_lines:
+                if " : " in line:
+                    key, val = line.split(" : ", 1)
+                    tg_body += f"<b>{h_esc(key.strip())}:</b> {h_esc(val.strip())}\n"
+                else:
+                    tg_body += f"{h_esc(line.strip())}\n"
+
+            threading.Thread(
+                target=cls._send_telegram_worker,
+                args=(tg_body,),
+                daemon=True,
+            ).start()
+
     @staticmethod
     def _send_telegram_worker(message: str):
         """Worker thread for non-blocking Telegram delivery."""
