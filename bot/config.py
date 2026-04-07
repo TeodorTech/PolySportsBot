@@ -25,6 +25,7 @@ POLY_API_KEY = os.getenv("POLY_API_KEY")
 POLY_API_SECRET = os.getenv("POLY_API_SECRET")
 POLY_API_PASSPHRASE = os.getenv("POLY_API_PASSPHRASE")
 POLY_CHAIN_ID = int(os.getenv("POLY_CHAIN_ID", 137))      # 137 = Polygon mainnet
+POLY_FUNDER = os.getenv("POLY_FUNDER")                    # Proxy address (0xFA05...)
 
 # ── Database Config ────────────────────────────────────────────────────────────
 # Railway automatically provides DATABASE_URL

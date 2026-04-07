@@ -2,3 +2,4 @@ requests
 websocket-client
 psycopg2-binary
 py-clob-client
+python-dotenv
