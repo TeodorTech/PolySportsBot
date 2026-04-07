@@ -119,14 +119,18 @@ def get_token_id_for_outcome(event_id: str, outcome_label: str) -> tuple:
         log(f"Failed to fetch event details for {event_id}: {e}")
         return None, None
 
-    # Log start time for context but don't filter — trust market active status instead
+    # Only trade once the game has started — whale activity accumulated pre-game is the signal,
+    # but execution happens at tip-off so we're not trading on stale pre-game odds.
     start_raw = event_data.get("startTime") or event_data.get("startDate")
     if start_raw:
         try:
             start_dt = datetime.fromisoformat(start_raw.replace("Z", "+00:00"))
             now = datetime.now(timezone.utc)
             minutes_to_start = (start_dt - now).total_seconds() / 60
-            log(f"  Starts in {minutes_to_start:.0f}min (market active status is the gate).")
+            if minutes_to_start > 0:
+                log(f"  SKIP — game starts in {minutes_to_start:.0f}min, waiting for tip-off.")
+                return None, None
+            log(f"  Game started {abs(minutes_to_start):.0f}min ago — proceeding.")
         except Exception:
             pass
 
