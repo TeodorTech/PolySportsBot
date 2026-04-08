@@ -205,17 +205,19 @@ class PolymarketWatcher:
 
                 new_ids = sorted(list(new_t2e.keys()))
                 with self._lookup_lock:
-                    if new_ids != sorted(self.asset_ids):
+                    ids_changed = new_ids != sorted(self.asset_ids)
+                    # Always update lookup tables so metadata stays fresh
+                    self.token_to_event = new_t2e
+                    self.token_to_market = new_t2m
+                    self.token_to_mktid = new_t2mi
+                    self.event_to_volume = new_e2v
+                    self.token_to_start_time = new_t2st
+                    self.token_to_outcome = new_t2o
+                    self.token_to_event_id = new_t2ei
+                    self.token_to_sport = new_t2sp
+                    if ids_changed:
                         print(f"[REFRESH] Found {len(new_ids)} tokens. Updating subscriptions...")
                         self.asset_ids = new_ids
-                        self.token_to_event = new_t2e
-                        self.token_to_market = new_t2m
-                        self.token_to_mktid = new_t2mi
-                        self.event_to_volume = new_e2v
-                        self.token_to_start_time = new_t2st
-                        self.token_to_outcome = new_t2o
-                        self.token_to_event_id = new_t2ei
-                        self.token_to_sport = new_t2sp
                         self.subscribe()
             except Exception as exc:
                 print(f"[REFRESH ERROR] Failed to refresh: {exc}")
