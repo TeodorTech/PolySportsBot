@@ -89,6 +89,11 @@ class Database:
         try:
             with conn:
                 with conn.cursor() as cur:
+                    # Guard: event_id must be present
+                    if not event_id:
+                        print(f"  [DB WARN] Skipping save — event_id is missing for '{event_name}'")
+                        return
+
                     # 1. Check if an event with the same title already exists (Polymarket
                     #    may return a different id for the same real-world event after restart).
                     cur.execute('SELECT id FROM events WHERE title = %s LIMIT 1', (event_name,))
@@ -104,7 +109,7 @@ class Database:
                         SET title = EXCLUDED.title, total_volume = EXCLUDED.total_volume,
                             sport = EXCLUDED.sport,
                             outcomes = COALESCE(EXCLUDED.outcomes, events.outcomes)
-                    ''', (event_id, event_name, total_volume, sport, outcomes, 'active'))
+                    ''', (event_id, event_name, total_volume, sport, outcomes or [], 'active'))
 
                     # 2. INSERT the whale activity
                     cur.execute('''
