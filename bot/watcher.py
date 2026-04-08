@@ -22,11 +22,12 @@ class PolymarketWatcher:
         self.token_to_outcome = token_to_outcome
         self.token_to_event_id = token_to_event_id
         self.token_to_sport = token_to_sport
-        
+
         self.ws = None
         self._ping_thread = None
         self._refresh_thread = None
         self._stop_event = threading.Event()
+        self._lookup_lock = threading.RLock()  # Protect lookup table reads/writes
 
     def subscribe(self) -> None:
         """Send or update the 'market' subscription with current asset IDs."""
@@ -43,6 +44,7 @@ class PolymarketWatcher:
             vol = self.event_to_volume.get(event, 0)
             print(f"  ${vol:>12,.0f} | {event}")
 
+        print(f"[WATCHER] Subscribing to {len(self.asset_ids)} tokens...")
         subscription = {
             "assets_ids": self.asset_ids,
             "type": "market",
@@ -71,29 +73,38 @@ class PolymarketWatcher:
 
                 # Filter: BUY ONLY
                 if side.upper() != "BUY":
-                    continue
-                
-                # Filter: Value threshold
-                if value < MIN_TRADE_VALUE:
+                    print(f"[FILTER] Skipped {token_id} - side={side} (not BUY)")
                     continue
 
-                # Metadata
-                event_name = self.token_to_event.get(token_id, "Unknown")
-                market_name = self.token_to_market.get(token_id, "N/A")
-                outcome_name = self.token_to_outcome.get(token_id, "Unknown")
-                market_id = self.token_to_mktid.get(token_id, "N/A")
+                # Filter: Value threshold
+                if value < MIN_TRADE_VALUE:
+                    print(f"[FILTER] Skipped {token_id} - value=${value:.2f} < ${MIN_TRADE_VALUE:,.0f}")
+                    continue
+
+                # Metadata (protected by lock to avoid race conditions with refresh loop)
+                with self._lookup_lock:
+                    event_name = self.token_to_event.get(token_id, "Unknown")
+                    market_name = self.token_to_market.get(token_id, "N/A")
+                    outcome_name = self.token_to_outcome.get(token_id, "Unknown")
+                    market_id = self.token_to_mktid.get(token_id, "N/A")
+                    start_time_raw = self.token_to_start_time.get(token_id)
+                    event_id = self.token_to_event_id.get(token_id)
+                    sport = self.token_to_sport.get(token_id, 'Sports')
+
+                if event_name == "Unknown":
+                    print(f"[DEBUG] Token {token_id} not in lookup table (value=${value:.2f}, side={side})")
 
                 # Timestamp and Date comparison
                 try:
                     ts_ms = int(ts_raw)
                     msg_dt = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
                     ts_str = msg_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
-                    
+
                     # Filtering: Game Start Time
-                    start_time_raw = self.token_to_start_time.get(token_id)
                     if start_time_raw:
                         start_dt = datetime.fromisoformat(start_time_raw.replace("Z", "+00:00"))
                         if msg_dt >= start_dt:
+                            print(f"[FILTER] Skipped {token_id} - trade at {ts_str} >= game start {start_dt}")
                             continue  # Ignore trades after game start
                 except (ValueError, TypeError):
                     ts_str = str(ts_raw)
@@ -111,8 +122,6 @@ class PolymarketWatcher:
                     )
 
                 # Fetch real-time total volume for the event from Polymarket
-                event_id = self.token_to_event_id.get(token_id)
-                sport = self.token_to_sport.get(token_id, 'Sports')
                 total_volume = 0
                 all_outcomes = None
                 if event_id:
@@ -198,18 +207,19 @@ class PolymarketWatcher:
                 Database.update_event_statuses(active_event_ids)
 
                 new_ids = sorted(list(new_t2e.keys()))
-                if new_ids != sorted(self.asset_ids):
-                    print(f"[REFRESH] Found {len(new_ids)} tokens. Updating subscriptions...")
-                    self.asset_ids = new_ids
-                    self.token_to_event = new_t2e
-                    self.token_to_market = new_t2m
-                    self.token_to_mktid = new_t2mi
-                    self.event_to_volume = new_e2v
-                    self.token_to_start_time = new_t2st
-                    self.token_to_outcome = new_t2o
-                    self.token_to_event_id = new_t2ei
-                    self.token_to_sport = new_t2sp
-                    self.subscribe()
+                with self._lookup_lock:
+                    if new_ids != sorted(self.asset_ids):
+                        print(f"[REFRESH] Found {len(new_ids)} tokens. Updating subscriptions...")
+                        self.asset_ids = new_ids
+                        self.token_to_event = new_t2e
+                        self.token_to_market = new_t2m
+                        self.token_to_mktid = new_t2mi
+                        self.event_to_volume = new_e2v
+                        self.token_to_start_time = new_t2st
+                        self.token_to_outcome = new_t2o
+                        self.token_to_event_id = new_t2ei
+                        self.token_to_sport = new_t2sp
+                        self.subscribe()
             except Exception as exc:
                 print(f"[REFRESH ERROR] Failed to refresh: {exc}")
 

@@ -133,15 +133,16 @@ def build_lookup_tables(events: list[dict]):
         sport = extract_sport_label(event)
         event_to_volume[event_name] = volume
 
+        event_token_count = 0
         for market in markets:
             # Filter for Moneyline markets ONLY.
             # Skip markets that are clearly Spreads, Totals, or Over/Unders.
             group_title = (market.get("groupItemTitle") or "").lower()
             question = (market.get("question") or "").lower()
-            
-            is_non_moneyline = any(x in group_title or x in question 
+
+            is_non_moneyline = any(x in group_title or x in question
                                   for x in ["spread", "total", "handicap", "over", "under", "more than", "less than"])
-            
+
             # Also catch things like "Chiefs -3.5" or "Over 44.5"
             if ".5" in question or ".5" in group_title:
                 is_non_moneyline = True
@@ -188,6 +189,13 @@ def build_lookup_tables(events: list[dict]):
                     token_to_start_time[token_id] = start_time
                 if i < len(outcomes):
                     token_to_outcome[token_id] = str(outcomes[i])
+                event_token_count += 1
+
+        # Debug: log all events and their token counts
+        if event_token_count == 0:
+            print(f"[EVENT] ⚠️  {event_name} (${volume:,.0f}) - 0 moneyline tokens (filtered out)")
+        else:
+            print(f"[EVENT] ✓ {event_name} (${volume:,.0f}) - {event_token_count} moneyline tokens")
 
     return (token_to_event, token_to_market, token_to_mktid,
             event_to_volume, token_to_start_time, token_to_outcome,

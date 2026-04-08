@@ -125,6 +125,12 @@ def get_token_id_for_outcome(event_id: str, outcome_label: str, override_token_i
         log(f"Failed to fetch event details for {event_id}: {e}")
         return None, None
 
+    # Guard: Do not trade if game is already resolved/finished
+    event_status = event_data.get("status", "").lower()
+    if event_status in ("resolved", "closed", "finished"):
+        log(f"  SKIP — game is {event_status}, no longer tradeable.")
+        return None, None
+
     # Only trade once the game has started — whale activity accumulated pre-game is the signal,
     # but execution happens at tip-off so we're not trading on stale pre-game odds.
     start_raw = event_data.get("startTime") or event_data.get("startDate")
@@ -265,21 +271,27 @@ def place_trade(client, token_id: str, price: float, amount_usd: float):
         resp = client.post_order(signed_order, OrderType.FOK)
         log(f"  [CLOB] Raw response: {resp}")
 
-        # FOK orders must be explicitly confirmed as filled — any other status means failure
+        # Accept filled, matched, delayed, or mev orders — all represent successful placement
         status = resp.get("status", "")
         order_id = resp.get("orderID") or resp.get("id")
-        if not order_id or status.lower() not in ("matched", "filled", "mev"):
-            log(f"  [CLOB] Order not filled — status='{status}' response={resp}")
+        if not order_id or status.lower() not in ("matched", "filled", "delayed", "mev"):
+            log(f"  [CLOB] Order rejected — status='{status}' response={resp}")
             return None, None
 
         # Use actual fill price from response if available, fall back to pre-order best ask
         fill_price = None
-        try:
-            fill_price = float(resp.get("price") or resp.get("avgPrice") or resp.get("average_price") or 0) or None
-        except (TypeError, ValueError):
-            pass
-        actual_price = fill_price or price
-        log(f"  [CLOB] Fill price: {actual_price:.4f} (source: {'response' if fill_price else 'best_ask fallback'})")
+        for key in ["price", "avgPrice", "average_price"]:
+            candidate = resp.get(key)
+            if candidate is not None:
+                try:
+                    fill_price = float(candidate)
+                    break
+                except (TypeError, ValueError):
+                    pass
+
+        actual_price = fill_price if fill_price is not None else price
+        price_source = "response" if fill_price is not None else "best_ask fallback"
+        log(f"  [CLOB] Fill price: {actual_price:.4f} (source: {price_source})")
 
         return order_id, actual_price
 
@@ -381,7 +393,7 @@ def run():
                 outcome=consensus_outcome,
                 price=price,
                 amount_usd=TRADE_AMOUNT,
-                reason="order rejected or not filled — check logs",
+                reason="order rejected by CLOB — check logs",
             )
             skipped += 1
 
