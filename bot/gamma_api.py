@@ -133,6 +133,19 @@ def build_lookup_tables(events: list[dict]):
         sport = extract_sport_label(event)
         event_to_volume[event_name] = volume
 
+        # Skip events that have already started (only monitor pre-game signals)
+        start_time_raw = event.get("startTime") or event.get("startDate")
+        if start_time_raw:
+            try:
+                from datetime import datetime, timezone
+                start_dt = datetime.fromisoformat(start_time_raw.replace("Z", "+00:00"))
+                now = datetime.now(timezone.utc)
+                if start_dt <= now:
+                    print(f"[EVENT] ⏸️  {event_name} ({volume:,.0f}) - game already started, skipping")
+                    continue
+            except Exception:
+                pass
+
         event_token_count = 0
         for market in markets:
             # Filter for Moneyline markets ONLY.
