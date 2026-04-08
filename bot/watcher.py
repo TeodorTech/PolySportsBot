@@ -73,12 +73,10 @@ class PolymarketWatcher:
 
                 # Filter: BUY ONLY
                 if side.upper() != "BUY":
-                    print(f"[FILTER] Skipped {token_id} - side={side} (not BUY)")
                     continue
 
                 # Filter: Value threshold
                 if value < MIN_TRADE_VALUE:
-                    print(f"[FILTER] Skipped {token_id} - value=${value:.2f} < ${MIN_TRADE_VALUE:,.0f}")
                     continue
 
                 # Metadata (protected by lock to avoid race conditions with refresh loop)
@@ -104,7 +102,6 @@ class PolymarketWatcher:
                     if start_time_raw:
                         start_dt = datetime.fromisoformat(start_time_raw.replace("Z", "+00:00"))
                         if msg_dt >= start_dt:
-                            print(f"[FILTER] Skipped {token_id} - trade at {ts_str} >= game start {start_dt}")
                             continue  # Ignore trades after game start
                 except (ValueError, TypeError):
                     ts_str = str(ts_raw)
