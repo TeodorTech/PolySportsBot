@@ -117,7 +117,7 @@ class Database:
                         (event_id, outcome, token_id, side, price, trade_value, timestamp_utc, external_ts)
                         VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s)
                     ''', (event_id, outcome, token_id, side, price, value, ts))
-            print(f"  [DB INFO] Whale activity saved to database (Vol: ${total_volume:,.0f}).")
+            print(f"  [DB INFO] Whale activity saved to database — {event_name} (Vol: ${total_volume:,.0f}).")
         except Exception as e:
             print(f"  [DB ERROR] Failed to save whale activity: {e}")
         finally:
