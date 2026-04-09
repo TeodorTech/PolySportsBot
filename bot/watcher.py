@@ -49,7 +49,14 @@ class PolymarketWatcher:
             "assets_ids": self.asset_ids,
             "type": "market",
         }
-        self.ws.send(json.dumps(subscription))
+        payload = json.dumps(subscription)
+        self.ws.send(payload)
+        sent_events = sorted(set(
+            self.token_to_event.get(t, t) for t in self.asset_ids
+        ))
+        print(f"[WATCHER] Sent subscription for {len(sent_events)} event(s):")
+        for name in sent_events:
+            print(f"  - {name}")
         print(f"[WATCHER] Watching trades >= ${MIN_TRADE_VALUE:,.0f}\n")
 
     def on_message(self, ws, raw):

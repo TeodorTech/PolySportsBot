@@ -5,20 +5,21 @@ from config import GAMMA_API_URL, DATA_API_URL, SPORTS_TAG_ID, MIN_EVENT_VOLUME
 # Tag IDs that are too generic to use as a sport label
 _GENERIC_TAG_IDS = {1, 100639}  # "Sports", "Games"
 
+# Sport labels to exclude
+_EXCLUDED_LABELS = {
+    'esports', 'counter strike 2', 'league of legends', 'dota 2',
+    'indian premier league', 'cricket', 'boxing', 'ufc', 'mma', 'pga', 'nascar',
+}
+
 # Preferred label priority: higher = more specific/recognisable
 # Any label not listed gets priority 0
 _LABEL_PRIORITY = {
     # Leagues / organisations (most specific)
-    'nfl': 10, 'nba': 10, 'mlb': 10, 'nhl': 10, 'nascar': 10,
-    'pga': 10, 'ufc': 10, 'mma': 10,
-    'premier league': 10, 'champions league': 10, 'la liga': 10,
-    'serie a': 10, 'bundesliga': 10, 'ligue 1': 10,
-    'indian premier league': 10,
-    'esports': 9, 'counter strike 2': 9, 'league of legends': 9,
+    'nfl': 10, 'nba': 10, 'mlb': 10, 'nhl': 10,
     # Generic sport names (less specific but still useful)
     'basketball': 5, 'football': 5, 'soccer': 5, 'baseball': 5,
-    'hockey': 5, 'tennis': 5, 'golf': 5, 'cricket': 5, 'rugby': 5,
-    'boxing': 5, 'racing': 5,
+    'hockey': 5, 'tennis': 5, 'golf': 5, 'rugby': 5,
+    'racing': 5,
 }
 
 class GammaAPI:
@@ -132,6 +133,11 @@ def build_lookup_tables(events: list[dict]):
         volume = float(event.get("volume") or 0)
         sport = extract_sport_label(event)
         event_to_volume[event_name] = volume
+        
+        #Remove later after testing 
+        if sport.lower() in _EXCLUDED_LABELS:
+            print(f"[EVENT] ⛔  {event_name} — skipping excluded sport ({sport})")
+            continue
 
         # Skip events that have already started (only monitor pre-game signals)
         start_time_raw = event.get("startTime") or event.get("startDate")
