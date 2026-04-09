@@ -89,11 +89,11 @@ async function toggleSettlement(formData: FormData) {
 
   const isUnsettled = formData.get('unsettled') === '1';
   if (isUnsettled) {
-    await sql`UPDATE events SET whales_won = NULL, result_outcome = NULL, odds = NULL WHERE id = ${eventId}`;
+    await sql`UPDATE events SET whales_won = NULL, result_outcome = NULL, odds = NULL, status = 'active' WHERE id = ${eventId}`;
   } else if (resultOutcome) {
     const whalesWon = resultOutcome === whaleOutcome;
     const odds = !isNaN(oddsRaw) ? oddsRaw : null;
-    await sql`UPDATE events SET whales_won = ${whalesWon}, result_outcome = ${resultOutcome}, odds = ${odds} WHERE id = ${eventId}`;
+    await sql`UPDATE events SET whales_won = ${whalesWon}, result_outcome = ${resultOutcome}, odds = ${odds}, status = 'closed' WHERE id = ${eventId}`;
   }
 
   revalidatePath(`/${locale}/events/${eventId}`);

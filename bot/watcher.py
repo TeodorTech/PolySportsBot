@@ -199,10 +199,6 @@ class PolymarketWatcher:
                 (new_t2e, new_t2m, new_t2mi, new_e2v,
                  new_t2st, new_t2o, new_t2ei, new_t2sp) = build_lookup_tables(events)
 
-                # Update event statuses — mark anything no longer active as closed
-                active_event_ids = list(set(new_t2ei.values()))
-                Database.update_event_statuses(active_event_ids)
-
                 new_ids = sorted(list(new_t2e.keys()))
                 with self._lookup_lock:
                     ids_changed = new_ids != sorted(self.asset_ids)

@@ -123,28 +123,6 @@ class Database:
         finally:
             conn.close()
 
-    @staticmethod
-    def update_event_statuses(active_ids: list[str]):
-        """Mark events no longer in active_ids as 'closed'."""
-        conn = Database.get_connection()
-        if not conn or not active_ids:
-            return
-        try:
-            with conn:
-                with conn.cursor() as cur:
-                    cur.execute('''
-                        UPDATE events
-                        SET status = 'closed'
-                        WHERE status = 'active'
-                          AND id != ALL(%s)
-                    ''', (active_ids,))
-                    count = cur.rowcount
-                    if count > 0:
-                        print(f"[DB INFO] Marked {count} event(s) as closed.")
-        except Exception as e:
-            print(f"[DB ERROR] update_event_statuses: {e}")
-        finally:
-            conn.close()
 
     @staticmethod
     def has_trade_for_event(event_id: str) -> bool:
