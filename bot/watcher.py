@@ -219,7 +219,17 @@ class PolymarketWatcher:
                     self.token_to_event_id = new_t2ei
                     self.token_to_sport = new_t2sp
                     if ids_changed:
-                        print(f"[REFRESH] Found {len(new_ids)} tokens. Updating subscriptions...")
+                        old_events = set(self.token_to_event.values())
+                        new_events = set(new_t2e.values())
+                        added = new_events - old_events
+                        removed = old_events - new_events
+                        print(f"[REFRESH] Token set changed — re-subscribing on existing connection:")
+                        if added:
+                            for ev in sorted(added):
+                                print(f"  + {ev}")
+                        if removed:
+                            for ev in sorted(removed):
+                                print(f"  - {ev}")
                         self.asset_ids = new_ids
                         self.subscribe()
             except Exception as exc:
