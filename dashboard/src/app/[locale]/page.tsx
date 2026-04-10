@@ -35,7 +35,7 @@ async function getStats(range: TimeRange) {
 
 async function getTrendingMarkets() {
   return await sql`
-    SELECT e.id, e.title, e.sport, e.total_volume, e.whales_won, e.status,
+    SELECT e.id, e.title, e.sport, e.total_volume, e.whales_won, e.status, e.game_start_time,
            COUNT(w.id) as whale_count,
            SUM(w.trade_value) as whale_volume,
            (
@@ -209,6 +209,14 @@ export default async function DashboardPage({ params, searchParams }: { params: 
                           <span style={{color: 'var(--subtle)'}}>·</span>
                           <span className="font-semibold" style={{color: consensusColor(consensus)}}>
                             {consensus.toFixed(0)}% consensus
+                          </span>
+                        </>
+                      )}
+                      {event.game_start_time && (
+                        <>
+                          <span style={{color: 'var(--subtle)'}}>·</span>
+                          <span style={{color: 'var(--subtle)'}}>
+                            🕐 {new Date(event.game_start_time).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </>
                       )}

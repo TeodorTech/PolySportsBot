@@ -157,6 +157,11 @@ export default async function EventPage({
         </h1>
         <p className="text-sm md:text-base" style={{color: 'var(--muted)'}}>
           {data.activity.length} {t('whaleCount')} · ${(Number(data.event.total_volume) / 1000000).toFixed(1)}M {t('volume').toLowerCase()}
+          {data.event.game_start_time && (
+            <span className="ml-3" style={{color: 'var(--subtle)'}}>
+              · 🕐 {new Date(data.event.game_start_time).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
         </p>
       </header>
 
@@ -321,6 +326,17 @@ export default async function EventPage({
               {t('marketInsights')}
             </h3>
             <div className="space-y-3">
+              {data.event.game_start_time && (
+                <>
+                  <div className="flex justify-between items-center text-sm">
+                    <span style={{color: 'var(--muted)'}}>Game Start</span>
+                    <span className="font-bold font-mono text-right" style={{color: 'var(--text)', fontSize: '0.75rem'}}>
+                      {new Date(data.event.game_start_time).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <div className="divider" />
+                </>
+              )}
               <div className="flex justify-between items-center text-sm">
                 <span style={{color: 'var(--muted)'}}>{t('whaleBets')}</span>
                 <span className="font-bold" style={{color: 'var(--text)'}}>{data.activity.length}</span>

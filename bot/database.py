@@ -40,11 +40,13 @@ class Database:
                             result_outcome TEXT,
                             whales_won BOOLEAN DEFAULT NULL,
                             status TEXT,
+                            game_start_time TIMESTAMP WITH TIME ZONE,
                             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
                         );
 
                         ALTER TABLE events ADD COLUMN IF NOT EXISTS outcomes TEXT[];
                         ALTER TABLE events ADD COLUMN IF NOT EXISTS result_outcome TEXT;
+                        ALTER TABLE events ADD COLUMN IF NOT EXISTS game_start_time TIMESTAMP WITH TIME ZONE;
 
                         CREATE TABLE IF NOT EXISTS trades (
                             id SERIAL PRIMARY KEY,
@@ -80,7 +82,7 @@ class Database:
             conn.close()
 
     @staticmethod
-    def save_whale_activity(event_id: str, event_name: str, total_volume: float, outcome: str, side: str, price: float, value: float, ts: str, sport: str = 'Sports', outcomes: list = None, token_id: str = None):
+    def save_whale_activity(event_id: str, event_name: str, total_volume: float, outcome: str, side: str, price: float, value: float, ts: str, sport: str = 'Sports', outcomes: list = None, token_id: str = None, game_start_time: str = None):
         """Save a new whale activity to the database, processing the event upsert first."""
         conn = Database.get_connection()
         if not conn:
@@ -102,14 +104,23 @@ class Database:
                         event_id = row[0]
 
                     # 2. UPSERT the event (using the real Event ID)
+                    game_start_dt = None
+                    if game_start_time:
+                        try:
+                            from datetime import datetime, timezone
+                            game_start_dt = datetime.fromisoformat(game_start_time.replace("Z", "+00:00"))
+                        except Exception:
+                            pass
+
                     cur.execute('''
-                        INSERT INTO events (id, title, total_volume, sport, outcomes, status)
-                        VALUES (%s, %s, %s, %s, %s, %s)
+                        INSERT INTO events (id, title, total_volume, sport, outcomes, status, game_start_time)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (id) DO UPDATE
                         SET title = EXCLUDED.title, total_volume = EXCLUDED.total_volume,
                             sport = EXCLUDED.sport,
-                            outcomes = COALESCE(EXCLUDED.outcomes, events.outcomes)
-                    ''', (event_id, event_name, total_volume, sport, outcomes or [], 'active'))
+                            outcomes = COALESCE(EXCLUDED.outcomes, events.outcomes),
+                            game_start_time = COALESCE(EXCLUDED.game_start_time, events.game_start_time)
+                    ''', (event_id, event_name, total_volume, sport, outcomes or [], 'active', game_start_dt))
 
                     # 2. INSERT the whale activity
                     cur.execute('''

@@ -8,7 +8,7 @@ _GENERIC_TAG_IDS = {1, 100639}  # "Sports", "Games"
 # Sport labels to exclude
 _EXCLUDED_LABELS = {
     'esports', 'counter strike 2', 'league of legends', 'dota 2',
-    'indian premier league', 'cricket', 'boxing', 'ufc', 'mma', 'pga', 'nascar',
+    'indian premier league', 'cricket', 'ipl', 'boxing', 'ufc', 'mma', 'pga', 'nascar',
 }
 
 # Preferred label priority: higher = more specific/recognisable
