@@ -209,6 +209,9 @@ class PolymarketWatcher:
                 new_ids = sorted(list(new_t2e.keys()))
                 with self._lookup_lock:
                     ids_changed = new_ids != sorted(self.asset_ids)
+                    # Capture before overwriting so the diff is correct
+                    old_events = set(self.token_to_event.values())
+                    new_events = set(new_t2e.values())
                     # Always update lookup tables so metadata stays fresh
                     self.token_to_event = new_t2e
                     self.token_to_market = new_t2m
@@ -219,8 +222,6 @@ class PolymarketWatcher:
                     self.token_to_event_id = new_t2ei
                     self.token_to_sport = new_t2sp
                     if ids_changed:
-                        old_events = set(self.token_to_event.values())
-                        new_events = set(new_t2e.values())
                         added = new_events - old_events
                         removed = old_events - new_events
                         print(f"[REFRESH] Token set changed — re-subscribing on existing connection:")

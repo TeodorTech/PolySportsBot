@@ -53,6 +53,7 @@ class GammaAPI:
         offset = 0
 
         print(f"[GAMMA API] Fetching from {GAMMA_API_URL}...")
+        print(f"[GAMMA API] List of events hidden for readability.Uncomment the print statement below to see all events and their volumes.")
 
         while True:
             page = cls.fetch_events(offset=offset, limit=limit)
@@ -136,7 +137,7 @@ def build_lookup_tables(events: list[dict]):
         
         #Remove later after testing 
         if sport.lower() in _EXCLUDED_LABELS:
-            print(f"[EVENT] ⛔  {event_name} — skipping excluded sport ({sport})")
+            # print(f"[EVENT] ⛔  {event_name} — skipping excluded sport ({sport})")
             continue
 
         # Skip events that have already started (only monitor pre-game signals)
@@ -147,7 +148,7 @@ def build_lookup_tables(events: list[dict]):
                 start_dt = datetime.fromisoformat(start_time_raw.replace("Z", "+00:00"))
                 now = datetime.now(timezone.utc)
                 if start_dt <= now:
-                    print(f"[EVENT] ⏸️  {event_name} ({volume:,.0f}) - game already started, skipping")
+                    # print(f"[EVENT] ⏸️  {event_name} ({volume:,.0f}) - game already started, skipping")
                     continue
             except Exception:
                 pass
@@ -212,9 +213,9 @@ def build_lookup_tables(events: list[dict]):
 
         # Debug: log all events and their token counts
         if event_token_count == 0:
-            print(f"[EVENT] ⚠️  {event_name} (${volume:,.0f}) - 0 moneyline tokens (filtered out)")
-        else:
-            print(f"[EVENT] ✓ {event_name} (${volume:,.0f}) - {event_token_count} moneyline tokens")
+             print(f"[EVENT] ⚠️  {event_name} (${volume:,.0f}) - 0 moneyline tokens (filtered out)")
+        # else:
+        #     print(f"[EVENT] ✓ {event_name} (${volume:,.0f}) - {event_token_count} moneyline tokens")
 
     return (token_to_event, token_to_market, token_to_mktid,
             event_to_volume, token_to_start_time, token_to_outcome,
