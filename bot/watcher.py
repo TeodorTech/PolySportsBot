@@ -3,7 +3,12 @@ import threading
 import time
 import websocket
 from datetime import datetime, timezone
-from config import CLOB_WSS_URL, MIN_TRADE_VALUE, MIN_NOTIFY_VALUE, PING_INTERVAL, REFRESH_INTERVAL
+from zoneinfo import ZoneInfo
+from config import CLOB_WSS_URL, MIN_TRADE_VALUE, MIN_NOTIFY_VALUE, PING_INTERVAL, REFRESH_INTERVAL, REFRESH_INTERVAL_NIGHT
+
+BUCHAREST_TZ = ZoneInfo("Europe/Bucharest")
+NIGHT_START = 0   # midnight
+NIGHT_END = 9     # 9 AM
 from gamma_api import GammaAPI, build_lookup_tables
 from notifier import Notifier
 from database import Database
@@ -198,9 +203,16 @@ class PolymarketWatcher:
                 except:
                     break
 
+    def _get_refresh_interval(self):
+        """Return the appropriate refresh interval based on Bucharest time."""
+        hour = datetime.now(BUCHAREST_TZ).hour
+        if NIGHT_START <= hour < NIGHT_END:
+            return REFRESH_INTERVAL_NIGHT
+        return REFRESH_INTERVAL
+
     def _refresh_loop(self):
         """Re-scan for qualify events and update subscriptions."""
-        while not self._stop_event.wait(REFRESH_INTERVAL):
+        while not self._stop_event.wait(self._get_refresh_interval()):
             try:
                 print("\n[REFRESH] Scanning for new qualifying events...")
                 events = GammaAPI.fetch_all_sports_events()
@@ -225,7 +237,7 @@ class PolymarketWatcher:
                     if ids_changed:
                         added = new_events - old_events
                         removed = old_events - new_events
-                        print(f"[REFRESH] Token set changed — re-subscribing on existing connection:")
+                        print(f"[REFRESH] Token set changed:")
                         if added:
                             for ev in sorted(added):
                                 print(f"  + {ev}")
@@ -233,7 +245,9 @@ class PolymarketWatcher:
                             for ev in sorted(removed):
                                 print(f"  - {ev}")
                         self.asset_ids = new_ids
-                        self.subscribe()
+                        if self.ws:
+                            print("[REFRESH] Closing WebSocket to force re-subscribe on fresh connection...")
+                            self.ws.close()  # run() loop reconnects → on_open → subscribe()
             except Exception as exc:
                 print(f"[REFRESH ERROR] Failed to refresh: {exc}")
 

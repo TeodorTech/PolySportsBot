@@ -11,7 +11,8 @@ MIN_EVENT_VOLUME = int(os.getenv("MIN_EVENT_VOLUME", 100_000))
 MIN_TRADE_VALUE = int(os.getenv("MIN_TRADE_VALUE", 5_000))
 MIN_NOTIFY_VALUE = int(os.getenv("MIN_NOTIFY_VALUE", 25_000))
 PING_INTERVAL = int(os.getenv("PING_INTERVAL", 20))           
-REFRESH_INTERVAL = int(os.getenv("REFRESH_INTERVAL", 600))   
+REFRESH_INTERVAL = int(os.getenv("REFRESH_INTERVAL", 600))
+REFRESH_INTERVAL_NIGHT = int(os.getenv("REFRESH_INTERVAL_NIGHT", 3600))
 
 # ── Telegram Config ────────────────────────────────────────────────────────────
 TELEGRAM_ENABLED = True
