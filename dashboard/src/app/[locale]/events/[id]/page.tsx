@@ -7,6 +7,7 @@ import WhaleChart from '@/components/WhaleChart';
 import { getSportEmoji } from '@/lib/sportEmoji';
 import { revalidatePath } from 'next/cache';
 import { calcConsensus, consensusColor } from '@/lib/thresholds';
+import LocalTime from '@/components/LocalTime';
 
 interface WhaleTrade {
   id: number;
@@ -159,7 +160,7 @@ export default async function EventPage({
           {data.activity.length} {t('whaleCount')} · ${(Number(data.event.total_volume) / 1000000).toFixed(1)}M {t('volume').toLowerCase()}
           {data.event.game_start_time && (
             <span className="ml-3" style={{color: 'var(--subtle)'}}>
-              · 🕐 {new Date(data.event.game_start_time).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              · 🕐 <LocalTime iso={data.event.game_start_time} />
             </span>
           )}
         </p>
@@ -330,9 +331,7 @@ export default async function EventPage({
                 <>
                   <div className="flex justify-between items-center text-sm">
                     <span style={{color: 'var(--muted)'}}>Game Start</span>
-                    <span className="font-bold font-mono text-right" style={{color: 'var(--text)', fontSize: '0.75rem'}}>
-                      {new Date(data.event.game_start_time).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                    <LocalTime iso={data.event.game_start_time} className="font-bold font-mono text-right" style={{color: 'var(--text)', fontSize: '0.75rem'}} />
                   </div>
                   <div className="divider" />
                 </>

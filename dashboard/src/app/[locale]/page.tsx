@@ -7,6 +7,7 @@ import { Suspense } from 'react';
 import TimeRangeFilter from '@/components/TimeRangeFilter';
 import { parseRange, rangeToDate, DEFAULT_RANGE, TIME_RANGES, type TimeRange } from '@/lib/timeRange';
 import { calcConsensus, consensusColor } from '@/lib/thresholds';
+import LocalTime from '@/components/LocalTime';
 
 async function getStats(range: TimeRange) {
   const since = rangeToDate(range);
@@ -195,10 +196,16 @@ export default async function DashboardPage({ params, searchParams }: { params: 
                 >
                   <span className="text-2xl shrink-0 w-10 text-center">{emoji}</span>
 
-                  <div className="flex-1 min-w-0 space-y-2">
+                  <div className="flex-1 min-w-0 space-y-1">
                     <h3 className="text-sm md:text-base font-semibold line-clamp-2" style={{color: 'var(--text)'}}>
                       {event.title}
                     </h3>
+
+                    {event.game_start_time && (
+                      <p className="text-xs font-medium" style={{color: 'var(--amber)'}}>
+                        🕐 <LocalTime iso={event.game_start_time} />
+                      </p>
+                    )}
 
                     <div className="flex items-center gap-4 text-xs" style={{color: 'var(--muted)'}}>
                       <span>{event.whale_count || 0} {t('whaleCount')}</span>
@@ -209,14 +216,6 @@ export default async function DashboardPage({ params, searchParams }: { params: 
                           <span style={{color: 'var(--subtle)'}}>·</span>
                           <span className="font-semibold" style={{color: consensusColor(consensus)}}>
                             {consensus.toFixed(0)}% consensus
-                          </span>
-                        </>
-                      )}
-                      {event.game_start_time && (
-                        <>
-                          <span style={{color: 'var(--subtle)'}}>·</span>
-                          <span style={{color: 'var(--subtle)'}}>
-                            🕐 {new Date(event.game_start_time).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </>
                       )}
