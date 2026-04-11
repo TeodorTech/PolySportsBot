@@ -44,6 +44,20 @@ interface ConsensusBucket {
   winRate: number | null;
 }
 
+interface ConvictionRow {
+  id: string;
+  title: string;
+  sport: string | null;
+  odds: string | null;
+  result_outcome: string | null;
+  whales_won: boolean;
+  big_trade_outcome: string | null;
+  big_trade_volume: string;
+  big_trade_count: string;
+  avg_price: string;
+  total_whale_volume: string;
+}
+
 async function getStatsData(range: TimeRange, threshold: MinTradeThreshold) {
   const since = rangeToDate(range);
   const dateFilter = since ? sql`AND e.created_at >= ${since}` : sql``;
@@ -174,7 +188,7 @@ async function getStatsData(range: TimeRange, threshold: MinTradeThreshold) {
     WHERE e.whales_won IS NOT NULL
     ${dateFilter}
     ORDER BY e.created_at DESC
-  `;
+  ` as unknown as ConvictionRow[];
 
   const convictionEvents = convictionRows.filter(r => Number(r.big_trade_count) > 0);
   const convictionTotal = convictionEvents.length;
