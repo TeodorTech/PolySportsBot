@@ -16,8 +16,8 @@ REFRESH_INTERVAL_NIGHT = int(os.getenv("REFRESH_INTERVAL_NIGHT", 3600))
 
 # ── Telegram Config ────────────────────────────────────────────────────────────
 TELEGRAM_ENABLED = True
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8326363584:AAHhOnM2fCWi6IVgXZBOL3bPgE4kDmm2pE4")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "7301455234")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 # ── Trader Config ─────────────────────────────────────────────────────────────
 TRADE_AMOUNT = float(os.getenv("TRADE_AMOUNT", 10))       # USD per trade
