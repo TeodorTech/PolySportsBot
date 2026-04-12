@@ -96,14 +96,6 @@ class Database:
                         print(f"  [DB WARN] Skipping save — event_id is missing for '{event_name}'")
                         return
 
-                    # 1. Check if an event with the same title already exists (Polymarket
-                    #    may return a different id for the same real-world event after restart).
-                    cur.execute('SELECT id FROM events WHERE title = %s LIMIT 1', (event_name,))
-                    row = cur.fetchone()
-                    if row:
-                        event_id = row[0]
-
-                    # 2. UPSERT the event (using the real Event ID)
                     game_start_dt = None
                     if game_start_time:
                         try:
@@ -111,6 +103,18 @@ class Database:
                             game_start_dt = datetime.fromisoformat(game_start_time.replace("Z", "+00:00"))
                         except Exception:
                             pass
+
+                    # Reuse an existing row only if title AND game_start_time match — catches
+                    # Polymarket re-issuing an id for the same real-world game after a restart,
+                    # without collapsing back-to-back games between the same teams.
+                    if game_start_dt is not None:
+                        cur.execute(
+                            'SELECT id FROM events WHERE title = %s AND game_start_time = %s LIMIT 1',
+                            (event_name, game_start_dt),
+                        )
+                        row = cur.fetchone()
+                        if row:
+                            event_id = row[0]
 
                     cur.execute('''
                         INSERT INTO events (id, title, total_volume, sport, outcomes, status, game_start_time)
