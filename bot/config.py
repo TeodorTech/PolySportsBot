@@ -20,6 +20,8 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 # ── Trader Config ─────────────────────────────────────────────────────────────
+_blocked_raw = os.getenv("BLOCKED_SPORTS", "Soccer")
+BLOCKED_SPORTS = [s.strip() for s in _blocked_raw.split(",") if s.strip()]
 TRADE_AMOUNT = float(os.getenv("TRADE_AMOUNT", 10))       # USD per trade
 POLY_PRIVATE_KEY = os.getenv("POLY_PRIVATE_KEY")          # Wallet private key (0x...)
 POLY_API_KEY = os.getenv("POLY_API_KEY")

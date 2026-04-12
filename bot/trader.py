@@ -25,6 +25,7 @@ def log(msg: str):
 from config import (
     GAMMA_API_URL,
     TRADE_AMOUNT,
+    BLOCKED_SPORTS,
     POLY_PRIVATE_KEY,
     POLY_API_KEY,
     POLY_API_SECRET,
@@ -60,7 +61,14 @@ def get_qualifying_events() -> list[dict]:
         log(f"DB connection failed: {e}")
         return []
 
-    query = """
+    sport_filter = ""
+    params: list = [CONVICTION_THRESHOLD]
+    if BLOCKED_SPORTS:
+        placeholders = ", ".join(["%s"] * len(BLOCKED_SPORTS))
+        sport_filter = f"AND (e.sport IS NULL OR e.sport NOT IN ({placeholders}))"
+        params = BLOCKED_SPORTS + params
+
+    query = f"""
         SELECT
             e.id          AS event_id,
             e.title       AS event_title,
@@ -71,20 +79,25 @@ def get_qualifying_events() -> list[dict]:
         JOIN whale_activity w ON w.event_id = e.id
         WHERE e.status = 'active'
           AND e.whales_won IS NULL
-          AND EXISTS (
-              SELECT 1 FROM whale_activity w2
-              WHERE w2.event_id = e.id
-                AND w2.trade_value >= %s
-          )
+          {sport_filter}
         GROUP BY e.id, e.title, w.outcome, w.token_id
-        HAVING SUM(w.trade_value) = (
-            SELECT SUM(w3.trade_value)
-            FROM whale_activity w3
-            WHERE w3.event_id = e.id
-            GROUP BY w3.outcome, w3.token_id
-            ORDER BY SUM(w3.trade_value) DESC
-            LIMIT 1
-        )
+        HAVING
+            -- Must be the consensus outcome (highest total volume for this event)
+            SUM(w.trade_value) = (
+                SELECT SUM(w3.trade_value)
+                FROM whale_activity w3
+                WHERE w3.event_id = e.id
+                GROUP BY w3.outcome, w3.token_id
+                ORDER BY SUM(w3.trade_value) DESC
+                LIMIT 1
+            )
+            -- Consensus outcome must also have at least one trade >= conviction threshold
+            AND EXISTS (
+                SELECT 1 FROM whale_activity w2
+                WHERE w2.event_id = e.id
+                  AND w2.token_id = w.token_id
+                  AND w2.trade_value >= %s
+            )
         ORDER BY consensus_volume DESC
     """
 
@@ -92,7 +105,7 @@ def get_qualifying_events() -> list[dict]:
     try:
         with conn:
             with conn.cursor() as cur:
-                cur.execute(query, (CONVICTION_THRESHOLD,))
+                cur.execute(query, params)
                 rows = cur.fetchall()
                 for row in rows:
                     results.append({
@@ -305,7 +318,7 @@ def place_trade(client, token_id: str, price: float, amount_usd: float):
 def run():
     log("=" * 60)
     log("TRADER JOB STARTED")
-    log(f"Config — amount: ${TRADE_AMOUNT} | conviction: ${CONVICTION_THRESHOLD:,}")
+    log(f"Config — amount: ${TRADE_AMOUNT} | conviction: ${CONVICTION_THRESHOLD:,} | blocked sports: {BLOCKED_SPORTS or 'none'}")
 
     events = get_qualifying_events()
     if not events:
