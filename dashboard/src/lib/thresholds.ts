@@ -25,3 +25,23 @@ export function parseThreshold(raw: string | string[] | undefined): MinTradeThre
     ? (value as MinTradeThreshold)
     : DEFAULT_THRESHOLD;
 }
+
+// Multi-sport filter: comma-separated sport names, null = all sports
+export function parseSports(raw: string | string[] | undefined): string[] | null {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value) return null;
+  const sports = value.split(',').map(s => s.trim()).filter(Boolean);
+  return sports.length > 0 ? sports : null;
+}
+
+// Event volume threshold options (in USD)
+export const VOLUME_OPTIONS = [0, 100_000, 300_000, 500_000, 700_000, 1_000_000] as const;
+export type MinVolumeThreshold = typeof VOLUME_OPTIONS[number];
+export const DEFAULT_MIN_VOLUME: MinVolumeThreshold = 0;
+
+export function parseMinVolume(raw: string | string[] | undefined): MinVolumeThreshold {
+  const value = Number(Array.isArray(raw) ? raw[0] : raw);
+  return (VOLUME_OPTIONS as readonly number[]).includes(value)
+    ? (value as MinVolumeThreshold)
+    : DEFAULT_MIN_VOLUME;
+}

@@ -2,29 +2,31 @@
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useCallback } from 'react';
-import { THRESHOLD_OPTIONS, DEFAULT_THRESHOLD, type MinTradeThreshold } from '@/lib/thresholds';
+import { VOLUME_OPTIONS, DEFAULT_MIN_VOLUME, type MinVolumeThreshold } from '@/lib/thresholds';
+
+function formatVolume(val: number): string {
+  if (val === 0) return 'Any volume';
+  if (val >= 1_000_000) return `$${val / 1_000_000}M+`;
+  return `$${val / 1000}k+`;
+}
 
 interface Props {
-  current: MinTradeThreshold;
+  current: MinVolumeThreshold;
 }
 
-function formatThreshold(val: number): string {
-  return `$${(val / 1000).toFixed(0)}k+`;
-}
-
-export default function MinTradeFilter({ current }: Props) {
+export default function MinVolumeFilter({ current }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const value = Number(e.target.value) as MinTradeThreshold;
+      const value = Number(e.target.value) as MinVolumeThreshold;
       const params = new URLSearchParams(searchParams.toString());
-      if (value === DEFAULT_THRESHOLD) {
-        params.delete('minTrade');
+      if (value === DEFAULT_MIN_VOLUME) {
+        params.delete('minVolume');
       } else {
-        params.set('minTrade', String(value));
+        params.set('minVolume', String(value));
       }
       router.push(pathname + '?' + params.toString());
     },
@@ -34,7 +36,7 @@ export default function MinTradeFilter({ current }: Props) {
   return (
     <div className="flex items-center gap-1.5">
       <span className="text-xs font-semibold uppercase tracking-wider shrink-0" style={{ color: 'var(--subtle)' }}>
-        Trade
+        Vol
       </span>
       <select
         value={current}
@@ -47,9 +49,9 @@ export default function MinTradeFilter({ current }: Props) {
           outline: 'none',
         }}
       >
-        {THRESHOLD_OPTIONS.map((val) => (
+        {VOLUME_OPTIONS.map(val => (
           <option key={val} value={val}>
-            {formatThreshold(val)}
+            {formatVolume(val)}
           </option>
         ))}
       </select>

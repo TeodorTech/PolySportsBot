@@ -9,8 +9,10 @@ import TimeRangeFilter from '@/components/TimeRangeFilter';
 import MinTradeFilter from '@/components/MinTradeFilter';
 import { parseRange, rangeToDate, TIME_RANGES, type TimeRange } from '@/lib/timeRange';
 import BankrollSection from '@/components/BankrollSection';
-import { parseThreshold, calcConsensus, type MinTradeThreshold } from '@/lib/thresholds';
+import { parseThreshold, calcConsensus, type MinTradeThreshold, parseSports, parseMinVolume, type MinVolumeThreshold } from '@/lib/thresholds';
 import ConvictionEventsList from '@/components/ConvictionEventsList';
+import SportFilter from '@/components/SportFilter';
+import MinVolumeFilter from '@/components/MinVolumeFilter';
 
 interface SettledEvent {
   id: string;
@@ -58,9 +60,23 @@ interface ConvictionRow {
   total_whale_volume: string;
 }
 
-async function getStatsData(range: TimeRange, threshold: MinTradeThreshold) {
+async function getStatsData(range: TimeRange, threshold: MinTradeThreshold, sports: string[] | null, minVolume: MinVolumeThreshold) {
   const since = rangeToDate(range);
   const dateFilter = since ? sql`AND e.created_at >= ${since}` : sql``;
+
+  // Multi-sport filter — split into named sports and whether 'Sports' (null) is included
+  const namedSports = sports ? sports.filter(s => s !== 'Sports') : [];
+  const includeNull = sports ? sports.includes('Sports') : false;
+  const sportFilter = sports && sports.length > 0
+    ? namedSports.length > 0 && includeNull
+      ? sql`AND (e.sport IN ${sql(namedSports)} OR e.sport IS NULL)`
+      : namedSports.length > 0
+        ? sql`AND e.sport IN ${sql(namedSports)}`
+        : sql`AND e.sport IS NULL`
+    : sql``;
+
+  // Event total volume filter
+  const volumeFilter = minVolume > 0 ? sql`AND e.total_volume >= ${minVolume}` : sql``;
 
   // Main settled events query — also computes top outcome volume per event for consensus
   const events = await sql`
@@ -93,11 +109,24 @@ async function getStatsData(range: TimeRange, threshold: MinTradeThreshold) {
     LEFT JOIN whale_activity w ON e.id = w.event_id
     WHERE e.whales_won IS NOT NULL
     ${dateFilter}
+    ${sportFilter}
+    ${volumeFilter}
     GROUP BY e.id
     ORDER BY e.created_at DESC
   ` as unknown as SettledEvent[];
 
-  if (events.length === 0) return null;
+  // Available sports for the filter UI — scoped to date range only, not sport/volume filters
+  // so the dropdown always shows all sports even when one is active
+  const sportListRows = await sql`
+    SELECT DISTINCT e.sport
+    FROM events e
+    WHERE e.whales_won IS NOT NULL
+    ${dateFilter}
+    ORDER BY e.sport ASC NULLS LAST
+  ` as unknown as { sport: string | null }[];
+  const availableSports: string[] = sportListRows.map(r => r.sport || 'Sports');
+
+  if (events.length === 0) return { availableSports, sports, empty: true as const };
 
   const totalEvents = events.length;
   const actualWins = events.filter(e => e.whales_won === true).length;
@@ -187,6 +216,8 @@ async function getStatsData(range: TimeRange, threshold: MinTradeThreshold) {
     FROM events e
     WHERE e.whales_won IS NOT NULL
     ${dateFilter}
+    ${sportFilter}
+    ${volumeFilter}
     ORDER BY e.created_at DESC
   ` as unknown as ConvictionRow[];
 
@@ -265,6 +296,8 @@ async function getStatsData(range: TimeRange, threshold: MinTradeThreshold) {
       AND w.trade_value >= 50000
       AND e.result_outcome IS NOT NULL
     ${dateFilter}
+    ${sportFilter}
+    ${volumeFilter}
     ORDER BY w.trade_value DESC
   `;
 
@@ -479,17 +512,21 @@ async function getStatsData(range: TimeRange, threshold: MinTradeThreshold) {
     noConvTotal, noConvWins, noConvWinRate, noConvRoi, noConvPnl,
     noConvRoiCount: noConvWithOdds.length,
     threshold,
+    availableSports,
+    sports,
   };
 }
 
 export default async function StatsPage({ params, searchParams }: { params: Promise<{ locale: string }>, searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
   const { locale } = await params;
-  const { range: rangeParam, minTrade: minTradeParam } = await searchParams;
+  const { range: rangeParam, minTrade: minTradeParam, sports: sportsParam, minVolume: minVolumeParam } = await searchParams;
   const range = parseRange(rangeParam);
   const threshold = parseThreshold(minTradeParam);
+  const sports = parseSports(sportsParam);
+  const minVolume = parseMinVolume(minVolumeParam);
   const t = await getTranslations('Dashboard');
   const ts = await getTranslations('Stats');
-  const data = await getStatsData(range, threshold);
+  const data = await getStatsData(range, threshold, sports, minVolume);
   const labelMap = Object.fromEntries(TIME_RANGES.map(({ labelKey }) => [labelKey, t(labelKey as Parameters<typeof t>[0])]));
 
   return (
@@ -506,7 +543,7 @@ export default async function StatsPage({ params, searchParams }: { params: Prom
             {t('backToMarkets')}
           </Link>
         </nav>
-        <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="space-y-4">
           <div className="space-y-2">
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight" style={{ color: 'var(--text)' }}>
               {ts('title')}
@@ -515,13 +552,28 @@ export default async function StatsPage({ params, searchParams }: { params: Prom
               {ts('subtitle')}
             </p>
           </div>
-          <Suspense fallback={<div className="h-8" />}>
-            <TimeRangeFilter current={range} labelMap={labelMap} />
-          </Suspense>
+          <div className="flex flex-col gap-2">
+            <Suspense fallback={<div className="h-8" />}>
+              <SportFilter current={sports} sports={data?.availableSports ?? []} />
+            </Suspense>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Suspense fallback={<div className="h-8" />}>
+                <MinVolumeFilter current={minVolume} />
+              </Suspense>
+              <span className="w-px h-4 shrink-0" style={{ background: 'var(--border)' }} />
+              <Suspense fallback={<div className="h-8" />}>
+                <MinTradeFilter current={threshold} />
+              </Suspense>
+              <span className="w-px h-4 shrink-0" style={{ background: 'var(--border)' }} />
+              <Suspense fallback={<div className="h-8" />}>
+                <TimeRangeFilter current={range} labelMap={labelMap} />
+              </Suspense>
+            </div>
+          </div>
         </div>
       </header>
 
-      {!data ? (
+      {!data || data.empty ? (
         <div className="p-10 text-center rounded-2xl" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--muted)' }}>
           {ts('noData')}
         </div>
@@ -765,16 +817,11 @@ export default async function StatsPage({ params, searchParams }: { params: Prom
 
           {/* No-Conviction Events */}
           <section className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-            <div className="px-5 py-4 flex items-start justify-between gap-4 flex-wrap" style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
-              <div>
-                <h2 className="text-base font-bold tracking-tight" style={{ color: 'var(--text)' }}>{ts('noConvTitle')}</h2>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--subtle)' }}>
-                  Events where every trade was under <span className="font-mono font-semibold" style={{ color: 'var(--amber)' }}>${(data.threshold / 1000).toFixed(0)}k</span> — the small-money baseline.
-                </p>
-              </div>
-              <Suspense fallback={<div className="h-8" />}>
-                <MinTradeFilter current={data.threshold} />
-              </Suspense>
+            <div className="px-5 py-4" style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
+              <h2 className="text-base font-bold tracking-tight" style={{ color: 'var(--text)' }}>{ts('noConvTitle')}</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--subtle)' }}>
+                Events where every trade was under <span className="font-mono font-semibold" style={{ color: 'var(--amber)' }}>${(data.threshold / 1000).toFixed(0)}k</span> — the small-money baseline.
+              </p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x" style={{ borderColor: 'var(--border)' }}>
               <div className="px-5 py-5" style={{ background: 'var(--surface)' }}>
