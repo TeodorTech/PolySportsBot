@@ -427,9 +427,9 @@ async function getStatsData(range: TimeRange, threshold: MinTradeThreshold, spor
   // Consensus = top_outcome_volume / whale_volume for each event
   // Buckets: Low <50%, Medium 50-80%, High >80%
   const buckets: ConsensusBucket[] = [
-    { label: 'High (>80%)', minPct: 80, maxPct: 100, total: 0, wins: 0, winRate: null },
+    { label: 'Perfect (100%)', minPct: 100, maxPct: 100, total: 0, wins: 0, winRate: null },
+    { label: 'High (80–99%)', minPct: 80, maxPct: 100, total: 0, wins: 0, winRate: null },
     { label: 'Medium (50–80%)', minPct: 50, maxPct: 80, total: 0, wins: 0, winRate: null },
-    { label: 'Low (<50%)', minPct: 0, maxPct: 50, total: 0, wins: 0, winRate: null },
   ];
 
   for (const e of events) {
