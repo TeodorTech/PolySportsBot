@@ -90,6 +90,7 @@ export default async function DashboardPage({ params, searchParams }: { params: 
   const page = Math.max(1, parseInt((pageParam as string) || '1', 10));
   const range = parseRange(rangeParam);
   const t = await getTranslations('Dashboard');
+  const tTeams = await getTranslations('Teams');
   const [stats, trending, { rows: settled, hasNext }] = await Promise.all([
     getStats(range),
     getTrendingMarkets(),
@@ -111,6 +112,7 @@ export default async function DashboardPage({ params, searchParams }: { params: 
           </div>
           <div className="flex items-center gap-5">
             <Link href={`/${locale}/stats`} className="text-xs font-semibold uppercase tracking-widest hover:opacity-100 transition-opacity" style={{color: 'var(--subtle)'}}>Stats</Link>
+            <Link href={`/${locale}/teams`} className="text-xs font-semibold uppercase tracking-widest hover:opacity-100 transition-opacity" style={{color: 'var(--subtle)'}}>{tTeams('nav')}</Link>
             <div className="flex gap-4">
               <Link href="/en" className="text-xs uppercase tracking-widest hover:opacity-100 transition-opacity" style={{color: locale === 'en' ? 'var(--amber)' : 'var(--subtle)'}}>EN</Link>
               <Link href="/ro" className="text-xs uppercase tracking-widest hover:opacity-100 transition-opacity" style={{color: locale === 'ro' ? 'var(--amber)' : 'var(--subtle)'}}>RO</Link>
