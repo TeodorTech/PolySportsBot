@@ -42,22 +42,10 @@ async function getEventData(id: string) {
     value: value as number
   })).sort((a, b) => b.value - a.value);
 
-  // Whale sentiment and consensus based on conviction trades (>= $50k) only
-  const CONVICTION_THRESHOLD = 50000;
-  const convictionTrades = activity.filter(t => Number(t.trade_value) >= CONVICTION_THRESHOLD);
-
-  const convictionVolumePerOutcome = convictionTrades.reduce((acc: Record<string, number>, curr) => {
-    acc[curr.outcome] = (acc[curr.outcome] || 0) + Number(curr.trade_value);
-    return acc;
-  }, {});
-
-  const convictionChartData = Object.entries(convictionVolumePerOutcome).map(([outcome, value]) => ({
-    outcome,
-    value: value as number
-  })).sort((a, b) => b.value - a.value);
-
-  // Outcome whales backed most (by conviction volume)
-  const whaleOutcome = convictionChartData[0]?.outcome ?? chartData[0]?.outcome ?? null;
+  // Outcome whales backed most — ranked by total whale volume across all trades,
+  // matching the trader's consensus logic. The $50k threshold is only a qualifier
+  // for whether the event shows up, not a filter on outcome ranking.
+  const whaleOutcome = chartData[0]?.outcome ?? null;
 
   const totalAllVolume = chartData.reduce((s, d) => s + d.value, 0);
   const consensusPct = calcConsensus(chartData[0]?.value ?? 0, totalAllVolume);

@@ -188,7 +188,7 @@ async function getStatsData(range: TimeRange, threshold: MinTradeThreshold, spor
       (
         SELECT w2.outcome
         FROM whale_activity w2
-        WHERE w2.event_id = e.id AND w2.trade_value >= ${threshold}
+        WHERE w2.event_id = e.id
         GROUP BY w2.outcome
         ORDER BY SUM(w2.trade_value) DESC
         LIMIT 1
