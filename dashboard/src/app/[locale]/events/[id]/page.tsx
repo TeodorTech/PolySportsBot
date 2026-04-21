@@ -50,12 +50,28 @@ async function getEventData(id: string) {
   const totalAllVolume = chartData.reduce((s, d) => s + d.value, 0);
   const consensusPct = calcConsensus(chartData[0]?.value ?? 0, totalAllVolume);
 
+  let autoOdds: number | null = null;
+  if (whaleOutcome) {
+    const rows = await sql`
+      SELECT price::float AS price
+      FROM whale_activity
+      WHERE event_id = ${id}
+        AND outcome  = ${whaleOutcome}
+        AND side     = 'BUY'
+      ORDER BY timestamp_utc DESC
+      LIMIT 1
+    `;
+    const p = rows[0]?.price;
+    if (p && p > 0) autoOdds = 1 / p;
+  }
+
   return {
     event: event[0],
     activity,
     chartData,
     whaleOutcome,
     consensusPct,
+    autoOdds,
   };
 }
 
@@ -266,7 +282,7 @@ export default async function EventPage({
                 step="0.01"
                 min="1"
                 placeholder={t('oddsPlaceholder')}
-                defaultValue={data.event.odds ?? ''}
+                defaultValue={data.event.odds ?? (data.autoOdds != null ? data.autoOdds.toFixed(2) : '')}
                 className="w-full py-2 px-3 rounded-lg text-sm"
                 style={{background: 'var(--surface2)', color: 'var(--text)', border: '1px solid var(--border)'}}
               />
