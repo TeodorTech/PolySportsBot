@@ -45,3 +45,15 @@ export function parseMinVolume(raw: string | string[] | undefined): MinVolumeThr
     ? (value as MinVolumeThreshold)
     : DEFAULT_MIN_VOLUME;
 }
+
+// Minimum decimal-odds threshold options (1 = no filter)
+export const MIN_ODDS_OPTIONS = [1, 1.5, 1.6, 1.7, 1.8, 1.9, 2] as const;
+export type MinOddsThreshold = typeof MIN_ODDS_OPTIONS[number];
+export const DEFAULT_MIN_ODDS: MinOddsThreshold = 1;
+
+export function parseMinOdds(raw: string | string[] | undefined): MinOddsThreshold {
+  const value = Number(Array.isArray(raw) ? raw[0] : raw);
+  return (MIN_ODDS_OPTIONS as readonly number[]).includes(value)
+    ? (value as MinOddsThreshold)
+    : DEFAULT_MIN_ODDS;
+}

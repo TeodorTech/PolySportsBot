@@ -9,10 +9,11 @@ import TimeRangeFilter from '@/components/TimeRangeFilter';
 import MinTradeFilter from '@/components/MinTradeFilter';
 import { parseRange, rangeToDate, TIME_RANGES, type TimeRange } from '@/lib/timeRange';
 import BankrollSection from '@/components/BankrollSection';
-import { parseThreshold, calcConsensus, type MinTradeThreshold, parseSports, parseMinVolume, type MinVolumeThreshold } from '@/lib/thresholds';
+import { parseThreshold, calcConsensus, type MinTradeThreshold, parseSports, parseMinVolume, type MinVolumeThreshold, parseMinOdds, type MinOddsThreshold } from '@/lib/thresholds';
 import ConvictionEventsList from '@/components/ConvictionEventsList';
 import SportFilter from '@/components/SportFilter';
 import MinVolumeFilter from '@/components/MinVolumeFilter';
+import MinOddsFilter from '@/components/MinOddsFilter';
 
 interface SettledEvent {
   id: string;
@@ -60,9 +61,14 @@ interface ConvictionRow {
   total_whale_volume: string;
 }
 
-async function getStatsData(range: TimeRange, threshold: MinTradeThreshold, sports: string[] | null, minVolume: MinVolumeThreshold) {
+async function getStatsData(range: TimeRange, threshold: MinTradeThreshold, sports: string[] | null, minVolume: MinVolumeThreshold, minOdds: MinOddsThreshold) {
   const since = rangeToDate(range);
   const dateFilter = since ? sql`AND e.created_at >= ${since}` : sql``;
+
+  // Min decimal-odds filter on event-level odds
+  const oddsFilter = minOdds > 1
+    ? sql`AND e.odds IS NOT NULL AND e.odds::numeric >= ${minOdds}`
+    : sql``;
 
   // Multi-sport filter — split into named sports and whether 'Sports' (null) is included
   const namedSports = sports ? sports.filter(s => s !== 'Sports') : [];
@@ -111,6 +117,7 @@ async function getStatsData(range: TimeRange, threshold: MinTradeThreshold, spor
     ${dateFilter}
     ${sportFilter}
     ${volumeFilter}
+    ${oddsFilter}
     GROUP BY e.id
     ORDER BY e.created_at DESC
   ` as unknown as SettledEvent[];
@@ -218,6 +225,7 @@ async function getStatsData(range: TimeRange, threshold: MinTradeThreshold, spor
     ${dateFilter}
     ${sportFilter}
     ${volumeFilter}
+    ${oddsFilter}
     ORDER BY e.created_at DESC
   ` as unknown as ConvictionRow[];
 
@@ -298,6 +306,7 @@ async function getStatsData(range: TimeRange, threshold: MinTradeThreshold, spor
     ${dateFilter}
     ${sportFilter}
     ${volumeFilter}
+    ${oddsFilter}
     ORDER BY w.trade_value DESC
   `;
 
@@ -519,14 +528,15 @@ async function getStatsData(range: TimeRange, threshold: MinTradeThreshold, spor
 
 export default async function StatsPage({ params, searchParams }: { params: Promise<{ locale: string }>, searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
   const { locale } = await params;
-  const { range: rangeParam, minTrade: minTradeParam, sports: sportsParam, minVolume: minVolumeParam } = await searchParams;
+  const { range: rangeParam, minTrade: minTradeParam, sports: sportsParam, minVolume: minVolumeParam, minOdds: minOddsParam } = await searchParams;
   const range = parseRange(rangeParam);
   const threshold = parseThreshold(minTradeParam);
   const sports = parseSports(sportsParam);
   const minVolume = parseMinVolume(minVolumeParam);
+  const minOdds = parseMinOdds(minOddsParam);
   const t = await getTranslations('Dashboard');
   const ts = await getTranslations('Stats');
-  const data = await getStatsData(range, threshold, sports, minVolume);
+  const data = await getStatsData(range, threshold, sports, minVolume, minOdds);
   const labelMap = Object.fromEntries(TIME_RANGES.map(({ labelKey }) => [labelKey, t(labelKey as Parameters<typeof t>[0])]));
 
   return (
@@ -563,6 +573,10 @@ export default async function StatsPage({ params, searchParams }: { params: Prom
               <span className="w-px h-4 shrink-0" style={{ background: 'var(--border)' }} />
               <Suspense fallback={<div className="h-8" />}>
                 <MinTradeFilter current={threshold} />
+              </Suspense>
+              <span className="w-px h-4 shrink-0" style={{ background: 'var(--border)' }} />
+              <Suspense fallback={<div className="h-8" />}>
+                <MinOddsFilter current={minOdds} />
               </Suspense>
               <span className="w-px h-4 shrink-0" style={{ background: 'var(--border)' }} />
               <Suspense fallback={<div className="h-8" />}>
