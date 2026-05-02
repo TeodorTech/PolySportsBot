@@ -165,5 +165,32 @@
     "glossaryRoi": "Flat $100 stake per event using each event's settled odds. Only counts events with odds entered.",
     "glossaryPpLabel": "pp (percentage points)",
     "glossaryPp": "The unit for edge. If the market implied a 60% win chance and the team won 80% of the time, the edge is +20pp — not 20%, but 20 percentage points. It measures how far off the market's prediction was, not how much money you made."
+  },
+  "TeamDetail": {
+    "subtitle": "Whale-backed events for this team",
+    "backToTeams": "Back to Teams",
+    "noData": "No settled events for this team in the selected range.",
+    "record": "Record",
+    "expected": "Expected",
+    "vsMarket": "vs. market expectation",
+    "noOdds": "No odds entered yet",
+    "recentForm": "Recent Form",
+    "recentFormDesc": "Last 10 settled events, oldest left → newest right.",
+    "avgPerEvent": "Avg. per event",
+    "convictionSplit": "With vs. Without Big Money",
+    "convictionSplitDesc": "Win rate split by whether at least one ≥ threshold trade landed on this team.",
+    "withConviction": "With big trade",
+    "withoutConviction": "No big trade",
+    "consensusSplit": "When Whales Agreed",
+    "consensusSplitDesc": "Win rate split by whether ≥ 60% of whale volume on the event was on this team.",
+    "highConsensus": "High consensus (≥ 60%)",
+    "lowConsensus": "Low consensus (< 60%)",
+    "historyTitle": "Event History",
+    "historyDesc": "Every settled event whales backed this team. Click a row to open the event.",
+    "event": "Event",
+    "result": "Result",
+    "consensus": "Consensus",
+    "odds": "Odds",
+    "pnl": "P&L"
   }
 }

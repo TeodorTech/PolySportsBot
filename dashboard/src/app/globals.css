@@ -51,6 +51,18 @@
   transform: translateY(-1px);
 }
 
+/* ── Clickable leaderboard row ── */
+.team-row {
+  transition: background-color 0.15s ease;
+}
+.team-row:hover {
+  background-color: #242830 !important;
+}
+.team-row:focus-visible {
+  outline: 2px solid #F59E0B;
+  outline-offset: -2px;
+}
+
 /* ── Accent text ── */
 .text-amber { color: #F59E0B; }
 .text-green  { color: #22C55E; }

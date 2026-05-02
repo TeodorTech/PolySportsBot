@@ -165,5 +165,32 @@
     "glossaryRoi": "Miză fixă $100 per eveniment folosind cotele finale. Contează doar evenimentele cu cote introduse.",
     "glossaryPpLabel": "pp (puncte procentuale)",
     "glossaryPp": "Unitatea de măsură pentru avantaj. Dacă piața implica 60% șanse de câștig și echipa a câștigat în 80% din cazuri, avantajul este +20pp — nu 20%, ci 20 puncte procentuale. Măsoară cât de departe a fost predicția pieței, nu cât de mulți bani ai câștigat."
+  },
+  "TeamDetail": {
+    "subtitle": "Evenimente pariate de balene pentru această echipă",
+    "backToTeams": "Înapoi la Echipe",
+    "noData": "Niciun eveniment finalizat pentru această echipă în intervalul selectat.",
+    "record": "Bilanț",
+    "expected": "Așteptat",
+    "vsMarket": "vs. așteptările pieței",
+    "noOdds": "Nu există cote introduse",
+    "recentForm": "Formă Recentă",
+    "recentFormDesc": "Ultimele 10 evenimente finalizate, cel mai vechi în stânga → cel mai recent în dreapta.",
+    "avgPerEvent": "Media per eveniment",
+    "convictionSplit": "Cu vs. Fără Bani Mari",
+    "convictionSplitDesc": "Rată de câștig în funcție de prezența unui trade ≥ pragul setat pe această echipă.",
+    "withConviction": "Cu trade mare",
+    "withoutConviction": "Fără trade mare",
+    "consensusSplit": "Când Balenele Sunt De Acord",
+    "consensusSplitDesc": "Rată de câștig în funcție de cât de concentrat a fost volumul (≥ 60% din total) pe această echipă.",
+    "highConsensus": "Consens ridicat (≥ 60%)",
+    "lowConsensus": "Consens scăzut (< 60%)",
+    "historyTitle": "Istoric Evenimente",
+    "historyDesc": "Toate evenimentele finalizate în care balenele au pariat această echipă. Click pe rând pentru a deschide evenimentul.",
+    "event": "Eveniment",
+    "result": "Rezultat",
+    "consensus": "Consens",
+    "odds": "Cote",
+    "pnl": "P&L"
   }
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { getSportEmoji } from '@/lib/sportEmoji';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { OVERALL_STAKE } from '@/lib/roi';
@@ -39,8 +40,18 @@ interface Props {
 
 export default function TeamsLeaderboard({ rows, labels, pageSize = 10 }: Props) {
   const [page, setPage] = useState(0);
+  const router = useRouter();
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const locale = (params?.locale as string) || 'en';
+  const qs = searchParams?.toString();
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const pageRows = rows.slice(page * pageSize, (page + 1) * pageSize);
+
+  const hrefFor = (key: string) => {
+    const path = `/${locale}/teams/${encodeURIComponent(key)}`;
+    return qs ? `${path}?${qs}` : path;
+  };
 
   return (
     <div>
@@ -62,7 +73,20 @@ export default function TeamsLeaderboard({ rows, labels, pageSize = 10 }: Props)
               const edgeColor = s.edge >= 5 ? 'var(--green)' : s.edge >= 0 ? 'var(--amber)' : 'var(--red)';
               const roiColor = s.roi === null ? 'var(--subtle)' : s.roi >= 0 ? 'var(--green)' : 'var(--red)';
               return (
-                <tr key={s.key} style={{ background: 'var(--surface)' }}>
+                <tr
+                  key={s.key}
+                  className="team-row cursor-pointer"
+                  style={{ background: 'var(--surface)' }}
+                  onClick={() => router.push(hrefFor(s.key))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      router.push(hrefFor(s.key));
+                    }
+                  }}
+                  tabIndex={0}
+                  role="link"
+                >
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-3 min-w-0">
                       <span className="text-lg shrink-0 w-7 text-center">{getSportEmoji('', s.sport)}</span>
